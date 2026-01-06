@@ -1,4 +1,4 @@
-export type ShareTarget = 'whatsapp' | 'telegram' | 'facebook' | 'x' | 'copy';
+export type ShareTarget = 'whatsapp' | 'telegram' | 'facebook' | 'x' | 'copy' | 'native';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
@@ -37,6 +37,7 @@ export function getShareUrl(
     case 'x':
       return getXShareUrl(url, text);
     case 'copy':
+    case 'native':
       return null;
     default:
       return null;

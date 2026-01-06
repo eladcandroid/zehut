@@ -62,6 +62,8 @@ export function ShareMenu({
           title,
           url,
         });
+        // Track the share after successful native share
+        await share('native');
         setIsOpen(false);
       } catch (err) {
         // User cancelled or error - fall back to showing options
