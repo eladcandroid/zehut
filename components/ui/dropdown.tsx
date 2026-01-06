@@ -6,6 +6,7 @@ import {
   useState,
   useRef,
   useEffect,
+  useCallback,
   type ReactNode,
   type ButtonHTMLAttributes,
 } from 'react';
@@ -15,6 +16,7 @@ interface DropdownContextValue {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   triggerRef: React.RefObject<HTMLButtonElement | null>;
+  position: { top: number; left: number; right: number } | null;
 }
 
 const DropdownContext = createContext<DropdownContextValue | null>(null);
@@ -33,8 +35,20 @@ interface DropdownProps {
 
 export function Dropdown({ children }: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number; right: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const updatePosition = useCallback(() => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPosition({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        right: window.innerWidth - rect.right - window.scrollX,
+      });
+    }
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -54,18 +68,23 @@ export function Dropdown({ children }: DropdownProps) {
     }
 
     if (isOpen) {
+      updatePosition();
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('keydown', handleEscape);
+      window.addEventListener('resize', updatePosition);
+      window.addEventListener('scroll', updatePosition, true);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [isOpen]);
+  }, [isOpen, updatePosition]);
 
   return (
-    <DropdownContext.Provider value={{ isOpen, setIsOpen, triggerRef }}>
+    <DropdownContext.Provider value={{ isOpen, setIsOpen, triggerRef, position }}>
       <div ref={containerRef} className="relative inline-block">
         {children}
       </div>
@@ -110,19 +129,61 @@ export function DropdownContent({
   align = 'end',
   className,
 }: DropdownContentProps) {
-  const { isOpen } = useDropdown();
+  const { isOpen, position } = useDropdown();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [adjustedStyle, setAdjustedStyle] = useState<React.CSSProperties>({});
+
+  useEffect(() => {
+    if (isOpen && position && contentRef.current) {
+      const contentRect = contentRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const padding = 8;
+
+      let style: React.CSSProperties = {
+        position: 'fixed',
+        top: position.top - window.scrollY + 4,
+        zIndex: 9999,
+      };
+
+      // Check if dropdown would overflow on the right
+      if (align === 'end') {
+        const rightPosition = position.right;
+        if (rightPosition + contentRect.width > viewportWidth - padding) {
+          // Not enough space on the right, align to left edge with padding
+          style.left = padding;
+          style.right = 'auto';
+        } else {
+          style.right = Math.max(padding, rightPosition);
+          style.left = 'auto';
+        }
+      } else {
+        const leftPosition = position.left;
+        if (leftPosition + contentRect.width > viewportWidth - padding) {
+          // Not enough space, align to right with padding
+          style.right = padding;
+          style.left = 'auto';
+        } else {
+          style.left = Math.max(padding, leftPosition);
+          style.right = 'auto';
+        }
+      }
+
+      setAdjustedStyle(style);
+    }
+  }, [isOpen, position, align]);
 
   if (!isOpen) return null;
 
   return (
     <div
+      ref={contentRef}
       role="menu"
+      style={adjustedStyle}
       className={cn(
-        'absolute z-50 mt-1 min-w-[160px] py-1',
+        'min-w-[160px] py-1',
         'bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[var(--radius-lg)]',
         'shadow-[var(--shadow-lg)]',
         'animate-in fade-in-0 zoom-in-95',
-        align === 'start' ? 'start-0' : 'end-0',
         className
       )}
     >
