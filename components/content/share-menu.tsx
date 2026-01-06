@@ -218,6 +218,7 @@ function ShareOption({
 interface ShareButtonProps {
   contentId: string;
   title: string;
+  contentUrl: string;
   variant?: 'icon' | 'full';
   className?: string;
 }
@@ -225,12 +226,13 @@ interface ShareButtonProps {
 export function ShareButton({
   contentId,
   title,
+  contentUrl,
   variant = 'icon',
   className,
 }: ShareButtonProps) {
   if (variant === 'icon') {
-    return <ShareMenu contentId={contentId} title={title} className={className} />;
+    return <ShareMenu contentId={contentId} title={title} contentUrl={contentUrl} className={className} />;
   }
 
-  return <ShareMenu contentId={contentId} title={title} className={className} />;
+  return <ShareMenu contentId={contentId} title={title} contentUrl={contentUrl} className={className} />;
 }
