@@ -4,73 +4,34 @@ import {
   InstagramLogo,
   TelegramLogo,
   XLogo,
+  FacebookLogo,
 } from '@phosphor-icons/react';
 import type { Platform } from '@/lib/db/models/content';
 
+// Single source of truth for all platforms
+export const PLATFORMS: Platform[] = ['youtube', 'facebook', 'telegram', 'x', 'tiktok', 'instagram'];
+
+export const platformConfig: Record<Platform, { icon: typeof YoutubeLogo; name: string; hebrewName: string; color: string }> = {
+  youtube: { icon: YoutubeLogo, name: 'YouTube', hebrewName: 'יוטיוב', color: 'var(--color-youtube)' },
+  facebook: { icon: FacebookLogo, name: 'Facebook', hebrewName: 'פייסבוק', color: 'var(--color-facebook)' },
+  telegram: { icon: TelegramLogo, name: 'Telegram', hebrewName: 'טלגרם', color: 'var(--color-telegram)' },
+  x: { icon: XLogo, name: 'X', hebrewName: 'X', color: 'var(--color-x)' },
+  tiktok: { icon: TiktokLogo, name: 'TikTok', hebrewName: 'טיקטוק', color: 'var(--color-tiktok)' },
+  instagram: { icon: InstagramLogo, name: 'Instagram', hebrewName: 'אינסטגרם', color: 'var(--color-instagram)' },
+};
+
 export function getPlatformIcon(platform: Platform) {
-  switch (platform) {
-    case 'youtube':
-      return YoutubeLogo;
-    case 'tiktok':
-      return TiktokLogo;
-    case 'instagram':
-      return InstagramLogo;
-    case 'telegram':
-      return TelegramLogo;
-    case 'x':
-      return XLogo;
-    default:
-      return null;
-  }
+  return platformConfig[platform]?.icon ?? null;
 }
 
 export function getPlatformColor(platform: Platform): string {
-  switch (platform) {
-    case 'youtube':
-      return 'var(--color-youtube)';
-    case 'tiktok':
-      return 'var(--color-tiktok)';
-    case 'instagram':
-      return 'var(--color-instagram)';
-    case 'telegram':
-      return 'var(--color-telegram)';
-    case 'x':
-      return 'var(--color-x)';
-    default:
-      return 'var(--color-muted)';
-  }
+  return platformConfig[platform]?.color ?? 'var(--color-muted)';
 }
 
 export function getPlatformName(platform: Platform): string {
-  switch (platform) {
-    case 'youtube':
-      return 'YouTube';
-    case 'tiktok':
-      return 'TikTok';
-    case 'instagram':
-      return 'Instagram';
-    case 'telegram':
-      return 'Telegram';
-    case 'x':
-      return 'X';
-    default:
-      return platform;
-  }
+  return platformConfig[platform]?.name ?? platform;
 }
 
 export function getPlatformHebrewName(platform: Platform): string {
-  switch (platform) {
-    case 'youtube':
-      return 'יוטיוב';
-    case 'tiktok':
-      return 'טיקטוק';
-    case 'instagram':
-      return 'אינסטגרם';
-    case 'telegram':
-      return 'טלגרם';
-    case 'x':
-      return 'X';
-    default:
-      return platform;
-  }
+  return platformConfig[platform]?.hebrewName ?? platform;
 }

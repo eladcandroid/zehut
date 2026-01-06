@@ -4,12 +4,14 @@ export { TelegramScraper, telegramScraper } from './telegram-scraper';
 export { XScraper, xScraper } from './x-scraper';
 export { TikTokScraper, tiktokScraper } from './tiktok-scraper';
 export { InstagramScraper, instagramScraper } from './instagram-scraper';
+export { FacebookScraper, facebookScraper } from './facebook-scraper';
 
 import { youtubeScraper } from './youtube-scraper';
 import { telegramScraper } from './telegram-scraper';
 import { xScraper } from './x-scraper';
 import { tiktokScraper } from './tiktok-scraper';
 import { instagramScraper } from './instagram-scraper';
+import { facebookScraper } from './facebook-scraper';
 import type { Platform } from '@/lib/db/models/content';
 import type { BaseScraper } from './base-scraper';
 
@@ -19,6 +21,7 @@ export const scrapers: Record<Platform, BaseScraper> = {
   x: xScraper,
   tiktok: tiktokScraper,
   instagram: instagramScraper,
+  facebook: facebookScraper,
 };
 
 export function getScraper(platform: Platform): BaseScraper {

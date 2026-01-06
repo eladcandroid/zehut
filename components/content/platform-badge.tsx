@@ -17,6 +17,7 @@ const platformStyles: Record<Platform, string> = {
   instagram: 'bg-pink-50 text-pink-600 border-pink-200',
   telegram: 'bg-sky-50 text-sky-600 border-sky-200',
   x: 'bg-gray-50 text-gray-800 border-gray-200',
+  facebook: 'bg-blue-50 text-blue-600 border-blue-200',
 };
 
 export function PlatformBadge({

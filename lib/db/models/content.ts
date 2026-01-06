@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-export type Platform = 'youtube' | 'tiktok' | 'instagram' | 'telegram' | 'x';
+export type Platform = 'youtube' | 'tiktok' | 'instagram' | 'telegram' | 'x' | 'facebook';
 export type ContentType = 'video' | 'image' | 'text' | 'reel' | 'story';
 
 export interface IAuthor {
@@ -70,7 +70,7 @@ const ContentSchema = new Schema<IContent>(
     platformId: { type: String, required: true },
     platform: {
       type: String,
-      enum: ['youtube', 'tiktok', 'instagram', 'telegram', 'x'],
+      enum: ['youtube', 'tiktok', 'instagram', 'telegram', 'x', 'facebook'],
       required: true,
     },
     type: {

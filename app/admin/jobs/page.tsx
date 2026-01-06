@@ -8,16 +8,13 @@ import {
   XCircle,
   Clock,
   Plus,
-  YoutubeLogo,
-  TiktokLogo,
-  InstagramLogo,
-  TelegramLogo,
-  XLogo,
 } from '@phosphor-icons/react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatRelativeTime } from '@/lib/utils/format';
+import { PLATFORMS, platformConfig } from '@/lib/utils/platform-icons';
+import type { Platform } from '@/lib/db/models/content';
 
 interface FetchJob {
   _id: string;
@@ -36,13 +33,6 @@ interface FetchJob {
   isEnabled: boolean;
 }
 
-const platformIcons: Record<string, typeof YoutubeLogo> = {
-  youtube: YoutubeLogo,
-  tiktok: TiktokLogo,
-  instagram: InstagramLogo,
-  telegram: TelegramLogo,
-  x: XLogo,
-};
 
 const statusConfig = {
   pending: { icon: Clock, label: 'ממתין', variant: 'secondary' as const },
@@ -161,11 +151,9 @@ export default function AdminJobsPage() {
                   onChange={(e) => setNewJob({ ...newJob, platform: e.target.value })}
                   className="w-full h-10 px-3 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] text-sm"
                 >
-                  <option value="youtube">YouTube</option>
-                  <option value="x">X (Twitter)</option>
-                  <option value="tiktok">TikTok</option>
-                  <option value="instagram">Instagram</option>
-                  <option value="telegram">Telegram</option>
+                  {PLATFORMS.map((p) => (
+                    <option key={p} value={p}>{platformConfig[p].name}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -246,7 +234,8 @@ export default function AdminJobsPage() {
                 </tr>
               ) : (
                 jobs.map((job) => {
-                  const Icon = platformIcons[job.platform];
+                  const platform = job.platform as Platform;
+                  const Icon = platformConfig[platform]?.icon;
                   const status = statusConfig[job.status];
                   const StatusIcon = status.icon;
 
