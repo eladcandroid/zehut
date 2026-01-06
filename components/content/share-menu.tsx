@@ -74,7 +74,7 @@ export function ShareMenu({
 
   const openSheet = () => {
     // Try native share first on mobile
-    if (navigator.share && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+    if (typeof navigator.share === 'function' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
       handleNativeShare();
     } else {
       setIsOpen(true);
