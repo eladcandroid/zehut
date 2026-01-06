@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import {
   House,
   FileText,
@@ -12,11 +14,18 @@ const navItems = [
   { href: '/admin/jobs', icon: ArrowsClockwise, label: 'משימות' },
 ];
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = await cookies();
+  const session = cookieStore.get('admin_session');
+
+  // Check if authenticated
+  if (session?.value !== 'authenticated') {
+    redirect('/admin-login');
+  }
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       {/* Header */}
