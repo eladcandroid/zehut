@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     const body = await request.json();
-    const { platform, sourceId, sourceType, searchQuery, maxItems = 50 } = body;
+    const { platform, sourceId, sourceType, searchQuery, maxItems = 500 } = body;
 
     if (!platform) {
       return NextResponse.json(

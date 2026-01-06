@@ -59,7 +59,12 @@ export default function HomePage() {
         setContent(data.content);
         setPage(1);
       } else {
-        setContent((prev) => [...prev, ...data.content]);
+        // Deduplicate by _id when appending
+        setContent((prev) => {
+          const existingIds = new Set(prev.map(item => item._id));
+          const newItems = data.content.filter(item => !existingIds.has(item._id));
+          return [...prev, ...newItems];
+        });
       }
 
       setHasMore(data.pagination.hasMore);
@@ -137,7 +142,7 @@ export default function HomePage() {
           }}
         />
 
-        <main className="flex-1 py-4 pe-4 lg:py-6 lg:pe-6">
+        <main className="flex-1 p-6 lg:p-8">
           {/* Search and Stats */}
           <div className="mb-6">
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-4">

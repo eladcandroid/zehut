@@ -55,6 +55,7 @@ export default function AdminJobsPage() {
   const [jobs, setJobs] = useState<FetchJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newJob, setNewJob] = useState({
     platform: 'youtube',
     sourceType: 'search',
@@ -88,7 +89,6 @@ export default function AdminJobsPage() {
           sourceId: job.sourceType === 'search' ? undefined : job.sourceId,
           searchQuery: job.sourceType === 'search' ? job.sourceId : undefined,
           sourceType: job.sourceType,
-          maxItems: 30,
         }),
       });
       await fetchJobs();
@@ -101,6 +101,7 @@ export default function AdminJobsPage() {
     if (!newJob.sourceId) return;
 
     try {
+      setIsSubmitting(true);
       await fetch('/api/fetch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -109,7 +110,6 @@ export default function AdminJobsPage() {
           sourceId: newJob.sourceType === 'search' ? undefined : newJob.sourceId,
           searchQuery: newJob.sourceType === 'search' ? newJob.sourceId : undefined,
           sourceType: newJob.sourceType,
-          maxItems: 30,
         }),
       });
       setNewJob({ platform: 'youtube', sourceType: 'search', sourceId: '' });
@@ -117,6 +117,8 @@ export default function AdminJobsPage() {
       await fetchJobs();
     } catch (error) {
       console.error('Failed to add job:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -191,10 +193,11 @@ export default function AdminJobsPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button onClick={addJob} disabled={!newJob.sourceId}>
-                הפעל משימה
+              <Button onClick={addJob} disabled={!newJob.sourceId || isSubmitting}>
+                {isSubmitting && <ArrowsClockwise weight="bold" className="w-4 h-4 animate-spin" />}
+                {isSubmitting ? 'מריץ משימה...' : 'הפעל משימה'}
               </Button>
-              <Button variant="ghost" onClick={() => setIsAdding(false)}>
+              <Button variant="ghost" onClick={() => setIsAdding(false)} disabled={isSubmitting}>
                 ביטול
               </Button>
             </div>

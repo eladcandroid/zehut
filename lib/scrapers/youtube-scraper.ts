@@ -60,21 +60,27 @@ export class YouTubeScraper extends BaseScraper {
   }
 
   async fetchContent(
-    channelId: string,
+    channelIdOrHandle: string,
     options: FetchOptions = {}
   ): Promise<RawContentItem[]> {
-    const { maxItems = 50, since } = options;
+    const { maxItems = 500, since } = options;
     const items: RawContentItem[] = [];
 
     try {
       // First, get the uploads playlist ID
+      // Support both channel IDs (UC...) and handles (@username)
+      const isHandle = channelIdOrHandle.startsWith('@');
       const channelResponse = await this.youtube.channels.list({
-        part: ['contentDetails'],
-        id: [channelId],
+        part: ['contentDetails', 'snippet'],
+        ...(isHandle
+          ? { forHandle: channelIdOrHandle.substring(1) }
+          : { id: [channelIdOrHandle] }
+        ),
       });
 
-      const uploadsPlaylistId =
-        channelResponse.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+      const channel = channelResponse.data.items?.[0];
+      const uploadsPlaylistId = channel?.contentDetails?.relatedPlaylists?.uploads;
+      const channelId = channel?.id || channelIdOrHandle;
 
       if (!uploadsPlaylistId) {
         console.error('[YouTube] Could not find uploads playlist for channel');
@@ -132,7 +138,7 @@ export class YouTubeScraper extends BaseScraper {
     query: string,
     options: FetchOptions = {}
   ): Promise<RawContentItem[]> {
-    const { maxItems = 50, since } = options;
+    const { maxItems = 500, since } = options;
     const items: RawContentItem[] = [];
 
     try {
