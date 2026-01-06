@@ -1,65 +1,182 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Header } from '@/components/layout/header';
+import { Sidebar } from '@/components/layout/sidebar';
+import { SearchBar } from '@/components/filters/search-bar';
+import { ContentGrid, type ContentCardData } from '@/components/content';
+import { useVisitor } from '@/lib/hooks/use-visitor';
+import { Spinner } from '@phosphor-icons/react';
+import type { Platform } from '@/lib/db/models/content';
+
+interface ContentResponse {
+  content: ContentCardData[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
+}
+
+export default function HomePage() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>('all');
+  const [selectedSort, setSelectedSort] = useState('newest');
+  const [search, setSearch] = useState('');
+  const [content, setContent] = useState<ContentCardData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+
+  // Initialize visitor tracking
+  useVisitor();
+
+  const fetchContent = useCallback(async (reset = false) => {
+    try {
+      setIsLoading(true);
+      const currentPage = reset ? 1 : page;
+
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: '12',
+        sort: selectedSort,
+      });
+
+      if (selectedPlatform !== 'all') {
+        params.set('platform', selectedPlatform);
+      }
+
+      if (search) {
+        params.set('search', search);
+      }
+
+      const response = await fetch(`/api/content?${params}`);
+      const data: ContentResponse = await response.json();
+
+      if (reset) {
+        setContent(data.content);
+        setPage(1);
+      } else {
+        setContent((prev) => [...prev, ...data.content]);
+      }
+
+      setHasMore(data.pagination.hasMore);
+    } catch (error) {
+      console.error('Error fetching content:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, selectedPlatform, selectedSort, search]);
+
+  // Initial fetch and when filters change
+  useEffect(() => {
+    fetchContent(true);
+  }, [selectedPlatform, selectedSort]);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchContent(true);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const loadMore = useCallback(() => {
+    if (!isLoading && hasMore) {
+      setPage((prev) => prev + 1);
+    }
+  }, [isLoading, hasMore]);
+
+  // Fetch more when page changes
+  useEffect(() => {
+    if (page > 1) {
+      fetchContent(false);
+    }
+  }, [page]);
+
+  // Infinite scroll with Intersection Observer
+  const loaderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const loader = loaderRef.current;
+    if (!loader) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoading) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    );
+
+    observer.observe(loader);
+    return () => observer.disconnect();
+  }, [hasMore, isLoading, loadMore]);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="min-h-screen bg-[var(--color-background)]">
+      <Header onMenuClick={() => setSidebarOpen(true)} />
+
+      <div className="flex">
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          selectedPlatform={selectedPlatform}
+          onPlatformChange={(platform) => {
+            setSelectedPlatform(platform);
+            setSidebarOpen(false);
+          }}
+          selectedSort={selectedSort}
+          onSortChange={(sort) => {
+            setSelectedSort(sort);
+            setSidebarOpen(false);
+          }}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        <main className="flex-1 py-4 pe-4 lg:py-6 lg:pe-6">
+          {/* Search and Stats */}
+          <div className="mb-6">
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-4">
+              <div>
+                <h1 className="text-2xl font-semibold text-[var(--color-foreground)]">
+                  תוכן לשיתוף
+                </h1>
+                <p className="text-sm text-[var(--color-muted)] mt-1">
+                  גלו ושתפו את התכנים של זהות ומשה פייגלין
+                </p>
+              </div>
+              <SearchBar
+                value={search}
+                onChange={setSearch}
+                placeholder="חפש תוכן..."
+                className="w-full sm:w-64"
+              />
+            </div>
+          </div>
+
+          {/* Content Grid */}
+          <ContentGrid content={content} isLoading={isLoading && content.length === 0} />
+
+          {/* Infinite Scroll Loader */}
+          {hasMore && content.length > 0 && (
+            <div ref={loaderRef} className="mt-8 flex justify-center py-4">
+              {isLoading && (
+                <Spinner className="w-6 h-6 text-[var(--color-primary)] animate-spin" />
+              )}
+            </div>
+          )}
+
+          {!hasMore && content.length > 0 && (
+            <div className="mt-8 text-center text-sm text-[var(--color-muted)]">
+              הגעת לסוף התוכן
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
