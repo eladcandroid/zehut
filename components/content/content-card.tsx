@@ -135,6 +135,7 @@ export function ContentCard({ content, className }: ContentCardProps) {
           <ShareMenu
             contentId={content._id}
             title={content.title}
+            contentUrl={content.contentUrl}
             shareCount={content.shareCount}
           />
         </div>

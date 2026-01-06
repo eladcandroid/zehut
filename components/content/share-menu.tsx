@@ -13,11 +13,11 @@ import {
 } from '@phosphor-icons/react';
 import { useShare } from '@/lib/hooks/use-share';
 import { cn } from '@/lib/utils/cn';
-import { getContentUrl } from '@/lib/utils/share-url';
 
 interface ShareMenuProps {
   contentId: string;
   title: string;
+  contentUrl: string;
   shareCount?: number;
   className?: string;
 }
@@ -25,11 +25,12 @@ interface ShareMenuProps {
 export function ShareMenu({
   contentId,
   title,
+  contentUrl,
   shareCount = 0,
   className,
 }: ShareMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { share, copyLink, copied } = useShare({ contentId, title });
+  const { share, copyLink, copied } = useShare({ contentId, title, contentUrl });
 
   // Lock body scroll when sheet is open
   useEffect(() => {
@@ -54,13 +55,11 @@ export function ShareMenu({
   };
 
   const handleNativeShare = async () => {
-    const url = getContentUrl(contentId);
-
     if (navigator.share) {
       try {
         await navigator.share({
           title,
-          url,
+          url: contentUrl,
         });
         // Track the share after successful native share
         await share('native');

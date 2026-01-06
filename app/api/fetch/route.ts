@@ -78,28 +78,29 @@ export async function POST(request: NextRequest) {
     const duration = Date.now() - startTime;
 
     // Update or create fetch job record
-    if (sourceId) {
-      await FetchJob.findOneAndUpdate(
-        { platform, sourceId },
-        {
-          $set: {
-            platform,
-            sourceType: sourceType || 'channel',
-            sourceId,
-            sourceName: sourceId,
-            status: errorMessages.length > 0 ? 'failed' : 'completed',
-            lastRun: new Date(),
-            lastResult: {
-              itemsFetched: items.length,
-              newItems,
-              errorMessages,
-              duration,
-            },
+    const jobSourceId = sourceId || searchQuery;
+    const jobSourceType = sourceId ? (sourceType || 'channel') : 'search';
+
+    await FetchJob.findOneAndUpdate(
+      { platform, sourceId: jobSourceId, sourceType: jobSourceType },
+      {
+        $set: {
+          platform,
+          sourceType: jobSourceType,
+          sourceId: jobSourceId,
+          sourceName: jobSourceId,
+          status: errorMessages.length > 0 ? 'failed' : 'completed',
+          lastRun: new Date(),
+          lastResult: {
+            itemsFetched: items.length,
+            newItems,
+            errorMessages,
+            duration,
           },
         },
-        { upsert: true }
-      );
-    }
+      },
+      { upsert: true }
+    );
 
     return NextResponse.json({
       success: true,

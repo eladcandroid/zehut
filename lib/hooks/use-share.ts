@@ -4,7 +4,6 @@ import { useCallback, useState } from 'react';
 import { useVisitor } from './use-visitor';
 import {
   type ShareTarget,
-  getContentUrl,
   getShareUrl,
   copyToClipboard,
 } from '@/lib/utils/share-url';
@@ -12,6 +11,7 @@ import {
 interface UseShareProps {
   contentId: string;
   title: string;
+  contentUrl: string;
 }
 
 interface UseShareReturn {
@@ -22,7 +22,7 @@ interface UseShareReturn {
   copied: boolean;
 }
 
-export function useShare({ contentId, title }: UseShareProps): UseShareReturn {
+export function useShare({ contentId, title, contentUrl }: UseShareProps): UseShareReturn {
   const { visitorId } = useVisitor();
   const [isSharing, setIsSharing] = useState(false);
   const [lastSharedTarget, setLastSharedTarget] = useState<ShareTarget | null>(null);
@@ -54,8 +54,7 @@ export function useShare({ contentId, title }: UseShareProps): UseShareReturn {
   const share = useCallback(
     async (target: ShareTarget) => {
       setIsSharing(true);
-      const url = getContentUrl(contentId);
-      const shareUrl = getShareUrl(target, url, title);
+      const shareUrl = getShareUrl(target, contentUrl, title);
 
       await trackShare(target);
 
@@ -66,12 +65,11 @@ export function useShare({ contentId, title }: UseShareProps): UseShareReturn {
       setLastSharedTarget(target);
       setIsSharing(false);
     },
-    [contentId, title, trackShare]
+    [contentUrl, title, trackShare]
   );
 
   const copyLink = useCallback(async () => {
-    const url = getContentUrl(contentId);
-    const success = await copyToClipboard(url);
+    const success = await copyToClipboard(contentUrl);
 
     if (success) {
       await trackShare('copy');
@@ -80,7 +78,7 @@ export function useShare({ contentId, title }: UseShareProps): UseShareReturn {
     }
 
     return success;
-  }, [contentId, trackShare]);
+  }, [contentUrl, trackShare]);
 
   return {
     share,
