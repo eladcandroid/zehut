@@ -182,13 +182,13 @@ export default function AdminJobsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">מספר פריטים</label>
+                <label className="block text-sm font-medium mb-1">מספר פריטים (0 = ללא הגבלה)</label>
                 <input
                   type="number"
-                  min="1"
-                  max="500"
+                  min="0"
+                  max="10000"
                   value={newJob.maxItems}
-                  onChange={(e) => setNewJob({ ...newJob, maxItems: parseInt(e.target.value) || 50 })}
+                  onChange={(e) => setNewJob({ ...newJob, maxItems: parseInt(e.target.value) || 0 })}
                   className="w-full h-10 px-3 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] text-sm"
                 />
               </div>

@@ -89,8 +89,8 @@ export class FacebookScraper extends BaseScraper {
 
       page = await context.newPage();
 
-      // Navigate to the Facebook page
-      const pageUrl = `https://www.facebook.com/${pageId}`;
+      // Navigate directly to the Posts tab for more content
+      const pageUrl = `https://www.facebook.com/${pageId}/posts`;
       console.log(`[Facebook] Navigating to ${pageUrl}`);
 
       await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -109,12 +109,30 @@ export class FacebookScraper extends BaseScraper {
         throw new Error('Facebook requires login - cookies may have expired');
       }
 
-      // Scroll to load more posts
-      const scrollCount = Math.min(Math.ceil(maxItems / 2), 50); // ~2 posts per scroll, max 50 scrolls
-      console.log(`[Facebook] Scrolling ${scrollCount} times to load posts...`);
+      // Scroll to load more posts - more aggressive for larger maxItems
+      const scrollCount = Math.min(Math.ceil(maxItems / 2), 100); // ~2 posts per scroll, max 100 scrolls
+      console.log(`[Facebook] Scrolling ${scrollCount} times to load posts (target: ${maxItems})...`);
+
+      let lastHeight = 0;
+      let noNewContentCount = 0;
+
       for (let i = 0; i < scrollCount; i++) {
         await page.evaluate(() => window.scrollBy(0, 2000));
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(1500);
+
+        // Check if we've reached the bottom (no new content loaded)
+        const currentHeight = await page.evaluate(() => document.body.scrollHeight);
+        if (currentHeight === lastHeight) {
+          noNewContentCount++;
+          if (noNewContentCount >= 5) {
+            console.log(`[Facebook] No new content after ${i + 1} scrolls, stopping`);
+            break;
+          }
+        } else {
+          noNewContentCount = 0;
+          lastHeight = currentHeight;
+        }
+
         // Log progress every 10 scrolls
         if ((i + 1) % 10 === 0) {
           console.log(`[Facebook] Scrolled ${i + 1}/${scrollCount} times`);
