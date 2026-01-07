@@ -12,6 +12,7 @@ interface FacebookPost {
   likes: number;
   comments: number;
   shares: number;
+  views: number;
   imageUrl: string | null;
   videoUrl: string | null;
 }
@@ -109,11 +110,20 @@ export class FacebookScraper extends BaseScraper {
       }
 
       // Scroll to load more posts
-      const scrollCount = Math.min(Math.ceil(maxItems / 3), 20); // ~3 posts per scroll, max 20 scrolls
+      const scrollCount = Math.min(Math.ceil(maxItems / 2), 50); // ~2 posts per scroll, max 50 scrolls
+      console.log(`[Facebook] Scrolling ${scrollCount} times to load posts...`);
       for (let i = 0; i < scrollCount; i++) {
-        await page.evaluate(() => window.scrollBy(0, 1500));
-        await page.waitForTimeout(1500);
+        await page.evaluate(() => window.scrollBy(0, 2000));
+        await page.waitForTimeout(2000);
+        // Log progress every 10 scrolls
+        if ((i + 1) % 10 === 0) {
+          console.log(`[Facebook] Scrolled ${i + 1}/${scrollCount} times`);
+        }
       }
+
+      // Debug: screenshot after scrolling
+      await page.screenshot({ path: '/tmp/fb-after-scroll.png', fullPage: false });
+      console.log('[Facebook] Screenshot saved to /tmp/fb-after-scroll.png');
 
       // Extract posts
       const posts = await this.extractPosts(page, pageId, maxItems);
@@ -154,7 +164,12 @@ export class FacebookScraper extends BaseScraper {
         }
       }
 
-      console.log(`Found ${postElements.length} potential posts`);
+      // Debug: log what we found
+      console.log(`Found ${postElements.length} potential posts with selector`);
+
+      // Alternative: find all divs with data attributes that look like posts
+      const allArticles = document.querySelectorAll('div[role="article"], div[data-pagelet]');
+      console.log(`Found ${allArticles.length} articles/pagelets`);
 
       for (const post of postElements) {
         if (results.length >= maxItems) break;
@@ -227,6 +242,23 @@ export class FacebookScraper extends BaseScraper {
           const videoElement = post.querySelector('video');
           const videoUrl = videoElement?.getAttribute('src') || null;
 
+          // Extract metrics (likes, comments, shares, views)
+          const metricsText = post.textContent || '';
+          const parseNum = (str: string | undefined) => {
+            if (!str) return 0;
+            // Handle K/M suffixes
+            const cleaned = str.replace(/,/g, '');
+            if (cleaned.includes('K')) return parseFloat(cleaned) * 1000;
+            if (cleaned.includes('M')) return parseFloat(cleaned) * 1000000;
+            return parseInt(cleaned, 10) || 0;
+          };
+
+          // Match various patterns for metrics
+          const likesMatch = metricsText.match(/(\d+(?:[.,]\d+)?[KM]?)\s*(?:likes?|reactions?|אהבו)/i);
+          const commentsMatch = metricsText.match(/(\d+(?:[.,]\d+)?[KM]?)\s*(?:comments?|תגובות)/i);
+          const sharesMatch = metricsText.match(/(\d+(?:[.,]\d+)?[KM]?)\s*(?:shares?|שיתופים)/i);
+          const viewsMatch = metricsText.match(/(\d+(?:[.,]\d+)?[KM]?)\s*(?:views?|צפיות)/i);
+
           // Only add if we have meaningful content
           if (text.length > 10 || imageUrl || videoUrl) {
             results.push({
@@ -236,9 +268,10 @@ export class FacebookScraper extends BaseScraper {
               authorName: pageId,
               authorId: pageId,
               timestamp,
-              likes: 0,
-              comments: 0,
-              shares: 0,
+              likes: parseNum(likesMatch?.[1]),
+              comments: parseNum(commentsMatch?.[1]),
+              shares: parseNum(sharesMatch?.[1]),
+              views: parseNum(viewsMatch?.[1]),
               imageUrl,
               videoUrl,
             });
@@ -307,6 +340,7 @@ export class FacebookScraper extends BaseScraper {
         profileUrl: `https://www.facebook.com/${post.authorId}`,
       },
       platformMetrics: {
+        views: post.views || 0,
         likes: post.likes || 0,
         comments: post.comments || 0,
         shares: post.shares || 0,

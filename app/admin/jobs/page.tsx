@@ -50,6 +50,7 @@ export default function AdminJobsPage() {
     platform: 'youtube',
     sourceType: 'search',
     sourceId: '',
+    maxItems: 50,
   });
 
   const fetchJobs = async () => {
@@ -100,9 +101,10 @@ export default function AdminJobsPage() {
           sourceId: newJob.sourceType === 'search' ? undefined : newJob.sourceId,
           searchQuery: newJob.sourceType === 'search' ? newJob.sourceId : undefined,
           sourceType: newJob.sourceType,
+          maxItems: newJob.maxItems,
         }),
       });
-      setNewJob({ platform: 'youtube', sourceType: 'search', sourceId: '' });
+      setNewJob({ platform: 'youtube', sourceType: 'search', sourceId: '', maxItems: 50 });
       setIsAdding(false);
       await fetchJobs();
     } catch (error) {
@@ -143,7 +145,7 @@ export default function AdminJobsPage() {
             <h2 className="font-semibold">משימה חדשה</h2>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium mb-1">פלטפורמה</label>
                 <select
@@ -176,6 +178,17 @@ export default function AdminJobsPage() {
                   value={newJob.sourceId}
                   onChange={(e) => setNewJob({ ...newJob, sourceId: e.target.value })}
                   placeholder={newJob.sourceType === 'search' ? 'זהות פייגלין' : 'UC...'}
+                  className="w-full h-10 px-3 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">מספר פריטים</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="500"
+                  value={newJob.maxItems}
+                  onChange={(e) => setNewJob({ ...newJob, maxItems: parseInt(e.target.value) || 50 })}
                   className="w-full h-10 px-3 bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] text-sm"
                 />
               </div>
