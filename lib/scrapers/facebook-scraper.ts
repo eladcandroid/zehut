@@ -263,6 +263,38 @@ export class FacebookScraper extends BaseScraper {
           const sharesMatch = allText.match(/(\d+)\s*share/i);
           const viewsMatch = allText.match(/([\d.]+[KM]?)\s*views?/i);
 
+          // Extract timestamp from relative time links (e.g., "17h", "1d", "1w", "2mo")
+          let timestamp = new Date().toISOString();
+          const timeLinks = container.querySelectorAll('a[href*="__cft"]');
+          for (const timeLink of timeLinks) {
+            const text = timeLink.textContent?.trim() || '';
+            // Match patterns like "17h", "1d", "2w", "3mo", "1y"
+            const relTimeMatch = text.match(/^(\d+)(h|d|w|mo|y)$/);
+            if (relTimeMatch) {
+              const num = parseInt(relTimeMatch[1]);
+              const unit = relTimeMatch[2];
+              const now = new Date();
+              switch (unit) {
+                case 'h': now.setHours(now.getHours() - num); break;
+                case 'd': now.setDate(now.getDate() - num); break;
+                case 'w': now.setDate(now.getDate() - num * 7); break;
+                case 'mo': now.setMonth(now.getMonth() - num); break;
+                case 'y': now.setFullYear(now.getFullYear() - num); break;
+              }
+              timestamp = now.toISOString();
+              break;
+            }
+            // Also check aria-label for full date
+            const ariaLabel = timeLink.getAttribute('aria-label') || '';
+            if (ariaLabel.match(/\d{1,2},?\s*\d{4}|January|February|March|April|May|June|July|August|September|October|November|December/i)) {
+              const parsed = new Date(ariaLabel);
+              if (!isNaN(parsed.getTime())) {
+                timestamp = parsed.toISOString();
+                break;
+              }
+            }
+          }
+
           // Find images (skip small ones and profile pics)
           const images = container.querySelectorAll('img[src*="scontent"]');
           let imageUrl: string | null = null;
@@ -286,7 +318,7 @@ export class FacebookScraper extends BaseScraper {
             text: postText.slice(0, 5000),
             authorName: pageId,
             authorId: pageId,
-            timestamp: new Date().toISOString(),
+            timestamp,
             likes,
             comments: commentsMatch ? parseInt(commentsMatch[1]) : 0,
             shares: sharesMatch ? parseInt(sharesMatch[1]) : 0,
