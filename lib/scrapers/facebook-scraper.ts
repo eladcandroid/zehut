@@ -1,310 +1,318 @@
 import { BaseScraper, type FetchOptions, type RawContentItem, type SourceInfo } from './base-scraper';
 import type { Platform, ContentType } from '@/lib/db/models/content';
-
-const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID;
-const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET;
-const GRAPH_API_VERSION = 'v19.0';
-const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
+import { chromium, type Browser, type Page, type Cookie } from 'playwright';
 
 interface FacebookPost {
-  id: string;
-  message?: string;
-  story?: string;
-  created_time: string;
-  full_picture?: string;
-  permalink_url: string;
-  type?: string;
-  shares?: { count: number };
-  reactions?: { summary: { total_count: number } };
-  comments?: { summary: { total_count: number } };
-  attachments?: {
-    data: Array<{
-      type: string;
-      url?: string;
-      media?: {
-        image?: { src: string };
-        source?: string;
-      };
-      subattachments?: {
-        data: Array<{
-          media?: { image?: { src: string } };
-        }>;
-      };
-    }>;
-  };
+  postId: string;
+  postUrl: string;
+  text: string;
+  authorName: string;
+  authorId: string;
+  timestamp: string;
+  likes: number;
+  comments: number;
+  shares: number;
+  imageUrl: string | null;
+  videoUrl: string | null;
 }
 
-interface FacebookPage {
-  id: string;
-  name: string;
-  username?: string;
-  picture?: { data: { url: string } };
-  fan_count?: number;
-  link?: string;
-}
-
-interface GraphAPIResponse<T> {
-  data: T[];
-  paging?: {
-    cursors?: { after: string; before: string };
-    next?: string;
-  };
-  error?: {
-    message: string;
-    code: number;
-  };
-}
+// Facebook cookies from environment or file
+const FB_COOKIES: Cookie[] = [
+  {
+    name: 'c_user',
+    value: process.env.FB_C_USER || '100001799181170',
+    domain: '.facebook.com',
+    path: '/',
+    secure: true,
+    httpOnly: true,
+    sameSite: 'None' as const,
+    expires: Math.floor(Date.now() / 1000) + 86400 * 365, // 1 year
+  },
+  {
+    name: 'xs',
+    value: process.env.FB_XS || '21%3AHzzB2-eGrdvfsw%3A2%3A1767257679%3A-1%3A-1%3A%3AAcy3kMQBd8FQdIXUkkO-mD5LcRfoy0fwPnuI7IjQpL0',
+    domain: '.facebook.com',
+    path: '/',
+    secure: true,
+    httpOnly: true,
+    sameSite: 'None' as const,
+    expires: Math.floor(Date.now() / 1000) + 86400 * 365, // 1 year
+  },
+];
 
 export class FacebookScraper extends BaseScraper {
   platform: Platform = 'facebook';
-  name = 'Facebook Scraper';
+  name = 'Facebook Scraper (Playwright)';
 
-  private getAppAccessToken(): string {
-    if (!FACEBOOK_APP_ID || !FACEBOOK_APP_SECRET) {
-      throw new Error('Facebook credentials not configured');
-    }
-    return `${FACEBOOK_APP_ID}|${FACEBOOK_APP_SECRET}`;
-  }
-
-  private async graphRequest<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
-    const accessToken = this.getAppAccessToken();
-    const searchParams = new URLSearchParams({
-      access_token: accessToken,
-      ...params,
-    });
-
-    const url = `${GRAPH_API_BASE}${endpoint}?${searchParams}`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data.error) {
-      throw new Error(`Facebook API Error: ${data.error.message}`);
-    }
-
-    return data;
-  }
+  private browser: Browser | null = null;
 
   async validateCredentials(): Promise<boolean> {
-    try {
-      if (!FACEBOOK_APP_ID || !FACEBOOK_APP_SECRET) {
-        return false;
-      }
+    // Check if cookies are configured
+    return FB_COOKIES.every(c => c.value && c.value.length > 0);
+  }
 
-      // Test the app access token by getting app info
-      await this.graphRequest(`/${FACEBOOK_APP_ID}`, { fields: 'id,name' });
-      return true;
-    } catch (error) {
-      console.error('[Facebook] Credential validation failed:', error);
-      return false;
+  private async getBrowser(): Promise<Browser> {
+    if (!this.browser) {
+      this.browser = await chromium.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      });
+    }
+    return this.browser;
+  }
+
+  private async closeBrowser(): Promise<void> {
+    if (this.browser) {
+      await this.browser.close();
+      this.browser = null;
     }
   }
 
   async fetchContent(pageId: string, options: FetchOptions = {}): Promise<RawContentItem[]> {
     const { maxItems = 50 } = options;
-    const items: RawContentItem[] = [];
+
+    console.log(`[Facebook] Fetching posts from ${pageId} using Playwright...`);
+
+    let page: Page | null = null;
 
     try {
-      // First get page info
-      const pageInfo = await this.getSourceInfo(pageId);
-      if (!pageInfo) {
-        throw new Error(`Page not found: ${pageId}`);
+      const browser = await this.getBrowser();
+      const context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        viewport: { width: 1280, height: 800 },
+        locale: 'en-US',
+      });
+
+      // Set Facebook cookies
+      await context.addCookies(FB_COOKIES);
+
+      page = await context.newPage();
+
+      // Navigate to the Facebook page
+      const pageUrl = `https://www.facebook.com/${pageId}`;
+      console.log(`[Facebook] Navigating to ${pageUrl}`);
+
+      await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+      // Wait for posts to load
+      await page.waitForTimeout(5000);
+
+      // Check current URL and page title
+      const currentUrl = page.url();
+      const pageTitle = await page.title();
+      console.log(`[Facebook] Current URL: ${currentUrl}`);
+      console.log(`[Facebook] Page title: ${pageTitle}`);
+
+      // Check if we're on a login page
+      if (currentUrl.includes('login') || pageTitle.includes('Log in') || pageTitle.includes('Log Into')) {
+        throw new Error('Facebook requires login - cookies may have expired');
       }
 
-      // Fetch posts from the page
-      // Note: This requires Page Public Content Access permission for public pages
-      // or a Page Access Token for pages you manage
-      const fields = [
-        'id',
-        'message',
-        'story',
-        'created_time',
-        'full_picture',
-        'permalink_url',
-        'type',
-        'shares',
-        'reactions.summary(total_count)',
-        'comments.summary(total_count)',
-        'attachments{type,url,media,subattachments}',
-      ].join(',');
-
-      const response = await this.graphRequest<GraphAPIResponse<FacebookPost>>(
-        `/${pageId}/posts`,
-        {
-          fields,
-          limit: Math.min(maxItems, 100).toString(),
-        }
-      );
-
-      if (!response.data) {
-        console.warn('[Facebook] No posts data returned');
-        return items;
+      // Scroll to load more posts
+      const scrollCount = Math.min(Math.ceil(maxItems / 3), 20); // ~3 posts per scroll, max 20 scrolls
+      for (let i = 0; i < scrollCount; i++) {
+        await page.evaluate(() => window.scrollBy(0, 1500));
+        await page.waitForTimeout(1500);
       }
 
-      for (const post of response.data) {
-        if (items.length >= maxItems) break;
+      // Extract posts
+      const posts = await this.extractPosts(page, pageId, maxItems);
 
-        const contentItem = this.transformPost(post, pageInfo);
-        if (contentItem) {
-          items.push(contentItem);
-        }
-      }
+      console.log(`[Facebook] Extracted ${posts.length} posts from ${pageId}`);
 
-      // Handle pagination if needed
-      let nextUrl = response.paging?.next;
-      while (nextUrl && items.length < maxItems) {
-        await this.delay(500); // Rate limiting
+      await context.close();
 
-        const nextResponse = await fetch(nextUrl);
-        const nextData: GraphAPIResponse<FacebookPost> = await nextResponse.json();
+      return posts;
 
-        if (nextData.error || !nextData.data) break;
-
-        for (const post of nextData.data) {
-          if (items.length >= maxItems) break;
-          const contentItem = this.transformPost(post, pageInfo);
-          if (contentItem) {
-            items.push(contentItem);
-          }
-        }
-
-        nextUrl = nextData.paging?.next;
-      }
-
-      console.log(`[Facebook] Fetched ${items.length} posts from ${pageInfo.name}`);
     } catch (error) {
       console.error('[Facebook] Error fetching content:', error);
       throw error;
+    } finally {
+      await this.closeBrowser();
     }
+  }
 
-    return items;
+  private async extractPosts(page: Page, pageId: string, maxItems: number): Promise<RawContentItem[]> {
+    const posts = await page.evaluate((args) => {
+      const { pageId, maxItems } = args;
+      const results: any[] = [];
+      const seenIds = new Set<string>();
+
+      // Find post containers - Facebook uses various class patterns
+      // Try multiple selectors and combine results
+      const postSelectors = [
+        '[role="article"]',
+        '[data-pagelet^="FeedUnit"]',
+        'div[class*="x1yztbdb"][class*="x1n2onr6"]',
+      ];
+
+      let postElements: Element[] = [];
+      for (const selector of postSelectors) {
+        const elements = document.querySelectorAll(selector);
+        if (elements.length > postElements.length) {
+          postElements = Array.from(elements);
+        }
+      }
+
+      console.log(`Found ${postElements.length} potential posts`);
+
+      for (const post of postElements) {
+        if (results.length >= maxItems) break;
+
+        try {
+          // Extract post text - try multiple selectors
+          let text = '';
+          const textSelectors = [
+            '[data-ad-preview="message"]',
+            '[dir="auto"]:not([role="button"])',
+            'span[dir="auto"]',
+          ];
+          for (const sel of textSelectors) {
+            const el = post.querySelector(sel);
+            if (el && el.textContent && el.textContent.length > 20) {
+              text = el.textContent;
+              break;
+            }
+          }
+
+          // Extract post link - look for various URL patterns
+          let postUrl = '';
+          let postId = '';
+          const links = post.querySelectorAll('a[href]');
+          for (const link of links) {
+            const href = link.getAttribute('href') || '';
+            // Match Facebook post URL patterns
+            const postMatch = href.match(/\/(posts|photos|videos|watch|reel)\/(\d+)/) ||
+                             href.match(/\/permalink\/(\d+)/) ||
+                             href.match(/story_fbid=(\d+)/) ||
+                             href.match(/\/(\d{10,})(?:\/|$)/);
+            if (postMatch) {
+              postUrl = href.startsWith('http') ? href : `https://www.facebook.com${href}`;
+              postId = postMatch[2] || postMatch[1];
+              break;
+            }
+          }
+
+          // Skip if no ID or already seen
+          if (!postId) {
+            postId = `gen-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          }
+          if (seenIds.has(postId)) continue;
+          seenIds.add(postId);
+
+          // Extract timestamp from any time-related element
+          let timestamp = new Date().toISOString();
+          const timeLinks = post.querySelectorAll('a[href*="?__cft"]');
+          for (const tl of timeLinks) {
+            const ariaLabel = tl.getAttribute('aria-label');
+            if (ariaLabel && ariaLabel.match(/\d/)) {
+              timestamp = ariaLabel;
+              break;
+            }
+          }
+
+          // Extract images
+          const images = post.querySelectorAll('img[src*="scontent"]');
+          let imageUrl: string | null = null;
+          for (const img of images) {
+            const src = img.getAttribute('src');
+            // Skip small icons and profile pictures
+            if (src && !src.includes('_s.') && !src.includes('50x50') && !src.includes('40x40')) {
+              imageUrl = src;
+              break;
+            }
+          }
+
+          // Extract video
+          const videoElement = post.querySelector('video');
+          const videoUrl = videoElement?.getAttribute('src') || null;
+
+          // Only add if we have meaningful content
+          if (text.length > 10 || imageUrl || videoUrl) {
+            results.push({
+              postId,
+              postUrl: postUrl || `https://www.facebook.com/${pageId}`,
+              text: text.slice(0, 5000), // Limit text length
+              authorName: pageId,
+              authorId: pageId,
+              timestamp,
+              likes: 0,
+              comments: 0,
+              shares: 0,
+              imageUrl,
+              videoUrl,
+            });
+          }
+        } catch (e) {
+          // Skip problematic posts
+          console.error('Error extracting post:', e);
+        }
+      }
+
+      return results;
+    }, { pageId, maxItems });
+
+    return posts.map(post => this.transformPost(post));
   }
 
   async searchContent(query: string, options: FetchOptions = {}): Promise<RawContentItem[]> {
-    const { maxItems = 50 } = options;
-    const items: RawContentItem[] = [];
-
-    try {
-      // Search for pages matching the query
-      // Note: Page search requires Page Public Content Access permission
-      const response = await this.graphRequest<GraphAPIResponse<FacebookPage>>(
-        '/pages/search',
-        {
-          q: query,
-          fields: 'id,name,username,picture,fan_count,link',
-          limit: '10',
-        }
-      );
-
-      if (!response.data || response.data.length === 0) {
-        console.warn('[Facebook] No pages found for query:', query);
-        return items;
-      }
-
-      // Fetch posts from the first matching page
-      const topPage = response.data[0];
-      return this.fetchContent(topPage.id, { maxItems });
-    } catch (error) {
-      // Search endpoint often requires special permissions
-      // Fall back to treating query as a page ID/username
-      console.warn('[Facebook] Search failed, trying as page ID:', error);
-
-      try {
-        return await this.fetchContent(query, options);
-      } catch {
-        console.error('[Facebook] Could not fetch page:', query);
-        throw error;
-      }
-    }
+    console.log(`[Facebook] Search not supported, treating "${query}" as page ID`);
+    return this.fetchContent(query, options);
   }
 
   async getSourceInfo(pageId: string): Promise<SourceInfo | null> {
-    try {
-      const page = await this.graphRequest<FacebookPage>(`/${pageId}`, {
-        fields: 'id,name,username,picture.width(200),fan_count,link',
-      });
-
-      return {
-        id: page.id,
-        name: page.name,
-        url: page.link || `https://www.facebook.com/${page.username || page.id}`,
-        subscriberCount: page.fan_count,
-        avatarUrl: page.picture?.data?.url,
-      };
-    } catch (error) {
-      console.error('[Facebook] Error getting page info:', error);
-      return null;
-    }
+    return {
+      id: pageId,
+      name: pageId,
+      url: `https://www.facebook.com/${pageId}`,
+    };
   }
 
-  private transformPost(post: FacebookPost, pageInfo: SourceInfo): RawContentItem | null {
-    // Skip posts without content
-    const text = post.message || post.story || '';
-    if (!text && !post.full_picture) {
-      return null;
-    }
-
+  private transformPost(post: FacebookPost): RawContentItem {
     // Determine content type
     let type: ContentType = 'text';
-    if (post.type === 'video' || post.attachments?.data?.some(a => a.type === 'video_inline')) {
+    if (post.videoUrl) {
       type = 'video';
-    } else if (post.full_picture || post.attachments?.data?.some(a => a.type === 'photo')) {
+    } else if (post.imageUrl) {
       type = 'image';
     }
 
     // Extract title (first line or first 100 chars)
+    const text = post.text || '';
     const firstLine = text.split('\n')[0] || '';
     const title = firstLine.length > 100 ? `${firstLine.slice(0, 97)}...` : firstLine || 'Facebook Post';
 
-    // Get thumbnail
-    let thumbnailUrl = post.full_picture || '';
-    if (!thumbnailUrl && post.attachments?.data?.[0]?.media?.image?.src) {
-      thumbnailUrl = post.attachments.data[0].media.image.src;
-    }
-
     // Collect media URLs
     const mediaUrls: string[] = [];
-    if (post.full_picture) {
-      mediaUrls.push(post.full_picture);
+    if (post.imageUrl) {
+      mediaUrls.push(post.imageUrl);
     }
-    if (post.attachments?.data) {
-      for (const attachment of post.attachments.data) {
-        if (attachment.media?.image?.src) {
-          mediaUrls.push(attachment.media.image.src);
-        }
-        if (attachment.subattachments?.data) {
-          for (const sub of attachment.subattachments.data) {
-            if (sub.media?.image?.src) {
-              mediaUrls.push(sub.media.image.src);
-            }
-          }
-        }
-      }
+    if (post.videoUrl) {
+      mediaUrls.push(post.videoUrl);
     }
 
     return {
-      platformId: post.id,
+      platformId: post.postId,
       platform: 'facebook',
       type,
       title,
       description: text,
-      thumbnailUrl,
-      contentUrl: post.permalink_url,
-      mediaUrls: [...new Set(mediaUrls)], // Remove duplicates
+      thumbnailUrl: post.imageUrl || '',
+      contentUrl: post.postUrl,
+      mediaUrls,
       author: {
-        id: pageInfo.id,
-        name: pageInfo.name,
-        handle: pageInfo.url.split('/').pop() || pageInfo.id,
-        avatarUrl: pageInfo.avatarUrl,
-        profileUrl: pageInfo.url,
+        id: post.authorId,
+        name: post.authorName,
+        handle: post.authorName,
+        profileUrl: `https://www.facebook.com/${post.authorId}`,
       },
       platformMetrics: {
-        likes: post.reactions?.summary?.total_count,
-        comments: post.comments?.summary?.total_count,
-        shares: post.shares?.count,
+        likes: post.likes || 0,
+        comments: post.comments || 0,
+        shares: post.shares || 0,
         lastUpdated: new Date(),
       },
-      publishedAt: new Date(post.created_time),
+      publishedAt: new Date(post.timestamp),
       tags: this.extractTags(text),
       language: this.detectLanguage(text),
     };
