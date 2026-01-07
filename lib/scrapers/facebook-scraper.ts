@@ -89,8 +89,8 @@ export class FacebookScraper extends BaseScraper {
 
       page = await context.newPage();
 
-      // Navigate directly to the Posts tab for more content
-      const pageUrl = `https://www.facebook.com/${pageId}/posts`;
+      // Navigate to the page (not /posts - main page works better)
+      const pageUrl = `https://www.facebook.com/${pageId}`;
       console.log(`[Facebook] Navigating to ${pageUrl}`);
 
       await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -109,33 +109,43 @@ export class FacebookScraper extends BaseScraper {
         throw new Error('Facebook requires login - cookies may have expired');
       }
 
-      // Scroll to load more posts - more aggressive for larger maxItems
-      const scrollCount = Math.min(Math.ceil(maxItems / 2), 100); // ~2 posts per scroll, max 100 scrolls
-      console.log(`[Facebook] Scrolling ${scrollCount} times to load posts (target: ${maxItems})...`);
+      // Extract posts WHILE scrolling (Facebook virtualizes - removes posts as you scroll)
+      const allPosts: FacebookPost[] = [];
+      const seenTexts = new Set<string>();
+      const maxScrolls = Math.min(Math.ceil(maxItems * 1.5), 200);
+      let noNewPostsCount = 0;
+      let lastPostCount = 0;
 
-      let lastHeight = 0;
-      let noNewContentCount = 0;
+      console.log(`[Facebook] Starting incremental extraction (target: ${maxItems} posts)...`);
 
-      for (let i = 0; i < scrollCount; i++) {
-        await page.evaluate(() => window.scrollBy(0, 2000));
-        await page.waitForTimeout(1500);
+      for (let i = 0; i < maxScrolls && allPosts.length < maxItems; i++) {
+        // Extract current visible posts
+        const newPosts = await this.extractVisiblePosts(page, pageId, seenTexts);
 
-        // Check if we've reached the bottom (no new content loaded)
-        const currentHeight = await page.evaluate(() => document.body.scrollHeight);
-        if (currentHeight === lastHeight) {
-          noNewContentCount++;
-          if (noNewContentCount >= 5) {
-            console.log(`[Facebook] No new content after ${i + 1} scrolls, stopping`);
+        for (const post of newPosts) {
+          if (allPosts.length >= maxItems) break;
+          allPosts.push(post);
+        }
+
+        // Check if we got new posts
+        if (allPosts.length === lastPostCount) {
+          noNewPostsCount++;
+          if (noNewPostsCount >= 10) {
+            console.log(`[Facebook] No new posts after ${i + 1} scrolls, stopping`);
             break;
           }
         } else {
-          noNewContentCount = 0;
-          lastHeight = currentHeight;
+          noNewPostsCount = 0;
+          lastPostCount = allPosts.length;
         }
 
-        // Log progress every 10 scrolls
+        // Scroll down
+        await page.evaluate(() => window.scrollBy(0, 800));
+        await page.waitForTimeout(1000);
+
+        // Log progress
         if ((i + 1) % 10 === 0) {
-          console.log(`[Facebook] Scrolled ${i + 1}/${scrollCount} times`);
+          console.log(`[Facebook] Scroll ${i + 1}: collected ${allPosts.length}/${maxItems} posts`);
         }
       }
 
@@ -143,14 +153,11 @@ export class FacebookScraper extends BaseScraper {
       await page.screenshot({ path: '/tmp/fb-after-scroll.png', fullPage: false });
       console.log('[Facebook] Screenshot saved to /tmp/fb-after-scroll.png');
 
-      // Extract posts
-      const posts = await this.extractPosts(page, pageId, maxItems);
-
-      console.log(`[Facebook] Extracted ${posts.length} posts from ${pageId}`);
+      console.log(`[Facebook] Extracted ${allPosts.length} posts from ${pageId}`);
 
       await context.close();
 
-      return posts;
+      return allPosts.map(post => this.transformPost(post));
 
     } catch (error) {
       console.error('[Facebook] Error fetching content:', error);
@@ -160,150 +167,147 @@ export class FacebookScraper extends BaseScraper {
     }
   }
 
-  private async extractPosts(page: Page, pageId: string, maxItems: number): Promise<RawContentItem[]> {
+  private async extractVisiblePosts(page: Page, pageId: string, seenTexts: Set<string>): Promise<FacebookPost[]> {
+    const seenArray = Array.from(seenTexts);
+
     const posts = await page.evaluate((args) => {
-      const { pageId, maxItems } = args;
+      const { pageId, seenArray } = args;
+      const seenSet = new Set(seenArray);
       const results: any[] = [];
-      const seenIds = new Set<string>();
 
-      // Find post containers - Facebook uses various class patterns
-      // Try multiple selectors and combine results
-      const postSelectors = [
-        '[role="article"]',
-        '[data-pagelet^="FeedUnit"]',
-        'div[class*="x1yztbdb"][class*="x1n2onr6"]',
-      ];
+      // Helper to parse numbers with K/M suffixes
+      const parseNum = (str: string | undefined) => {
+        if (!str) return 0;
+        const cleaned = str.replace(/,/g, '');
+        if (cleaned.includes('K')) return Math.round(parseFloat(cleaned) * 1000);
+        if (cleaned.includes('M')) return Math.round(parseFloat(cleaned) * 1000000);
+        return parseInt(cleaned, 10) || 0;
+      };
 
-      let postElements: Element[] = [];
-      for (const selector of postSelectors) {
-        const elements = document.querySelectorAll(selector);
-        if (elements.length > postElements.length) {
-          postElements = Array.from(elements);
-        }
-      }
+      // Find posts by looking for Like count elements (aria-label="Like: X people")
+      const allElements = Array.from(document.querySelectorAll('*'));
+      const likeCountElements = allElements.filter(el => {
+        const aria = el.getAttribute('aria-label') || '';
+        return aria.match(/Like:\s*\d+/);
+      });
 
-      // Debug: log what we found
-      console.log(`Found ${postElements.length} potential posts with selector`);
-
-      // Alternative: find all divs with data attributes that look like posts
-      const allArticles = document.querySelectorAll('div[role="article"], div[data-pagelet]');
-      console.log(`Found ${allArticles.length} articles/pagelets`);
-
-      for (const post of postElements) {
-        if (results.length >= maxItems) break;
-
+      for (const likeEl of likeCountElements) {
         try {
-          // Extract post text - try multiple selectors
-          let text = '';
-          const textSelectors = [
-            '[data-ad-preview="message"]',
-            '[dir="auto"]:not([role="button"])',
-            'span[dir="auto"]',
-          ];
-          for (const sel of textSelectors) {
-            const el = post.querySelector(sel);
-            if (el && el.textContent && el.textContent.length > 20) {
-              text = el.textContent;
+          // Get like count from aria-label
+          const ariaLabel = likeEl.getAttribute('aria-label') || '';
+          const likesMatch = ariaLabel.match(/Like:\s*(\d+)/);
+          const likes = likesMatch ? parseInt(likesMatch[1]) : 0;
+
+          // Traverse up to find post container (about 15-20 levels up)
+          let container = likeEl;
+          for (let i = 0; i < 20; i++) {
+            if (!container.parentElement) break;
+            container = container.parentElement;
+          }
+
+          // Extract all text from container
+          const allText = container.innerText || '';
+          const lines = allText.split('\n').filter(l => l.trim().length > 15);
+
+          // Find main post text (Hebrew text, not page name or button labels)
+          let postText = '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            // Skip if it's the page name, button text, or reaction names
+            if (trimmed.includes('מפלגת זהות') ||
+                trimmed.includes('Like') ||
+                trimmed.includes('Comment') ||
+                trimmed.includes('Share') ||
+                trimmed.includes('See more') ||
+                trimmed.match(/^\d+[KM]?\s*(likes?|comments?|shares?|views?)/i) ||
+                trimmed.match(/and \d+ others$/)) {
+              continue;
+            }
+            // Look for Hebrew content or substantial English text
+            if ((trimmed.match(/[\u0590-\u05FF]/) && trimmed.length > 20) ||
+                (trimmed.length > 50 && !trimmed.includes('Verified'))) {
+              postText = trimmed;
               break;
             }
           }
 
-          // Extract post link - look for various URL patterns
+          // Skip if no text or already seen
+          if (!postText || postText.length < 15) continue;
+
+          const textKey = postText.slice(0, 100);
+          if (seenSet.has(textKey)) continue;
+          seenSet.add(textKey);
+
+          // Find post URL from links with pfbid or post patterns
           let postUrl = '';
           let postId = '';
-          const links = post.querySelectorAll('a[href]');
+          const links = container.querySelectorAll('a[href*="pfbid"], a[href*="/posts/"]');
           for (const link of links) {
             const href = link.getAttribute('href') || '';
-            // Match Facebook post URL patterns
-            const postMatch = href.match(/\/(posts|photos|videos|watch|reel)\/(\d+)/) ||
-                             href.match(/\/permalink\/(\d+)/) ||
-                             href.match(/story_fbid=(\d+)/) ||
-                             href.match(/\/(\d{10,})(?:\/|$)/);
-            if (postMatch) {
+            if (href.includes('pfbid') || href.includes('/posts/')) {
               postUrl = href.startsWith('http') ? href : `https://www.facebook.com${href}`;
-              postId = postMatch[2] || postMatch[1];
+              // Extract ID from pfbid or posts URL
+              const pfbidMatch = href.match(/pfbid([a-zA-Z0-9]+)/);
+              const postsMatch = href.match(/\/posts\/(\d+)/);
+              postId = pfbidMatch?.[1] || postsMatch?.[1] || '';
               break;
             }
           }
 
-          // Skip if no ID or already seen
           if (!postId) {
-            postId = `gen-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          }
-          if (seenIds.has(postId)) continue;
-          seenIds.add(postId);
-
-          // Extract timestamp from any time-related element
-          let timestamp = new Date().toISOString();
-          const timeLinks = post.querySelectorAll('a[href*="?__cft"]');
-          for (const tl of timeLinks) {
-            const ariaLabel = tl.getAttribute('aria-label');
-            if (ariaLabel && ariaLabel.match(/\d/)) {
-              timestamp = ariaLabel;
-              break;
-            }
+            postId = `fb-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
           }
 
-          // Extract images
-          const images = post.querySelectorAll('img[src*="scontent"]');
+          // Extract metrics from container text
+          const commentsMatch = allText.match(/(\d+)\s*comment/i);
+          const sharesMatch = allText.match(/(\d+)\s*share/i);
+          const viewsMatch = allText.match(/([\d.]+[KM]?)\s*views?/i);
+
+          // Find images (skip small ones and profile pics)
+          const images = container.querySelectorAll('img[src*="scontent"]');
           let imageUrl: string | null = null;
           for (const img of images) {
-            const src = img.getAttribute('src');
-            // Skip small icons and profile pictures
-            if (src && !src.includes('_s.') && !src.includes('50x50') && !src.includes('40x40')) {
-              imageUrl = src;
-              break;
-            }
+            const src = img.getAttribute('src') || '';
+            const width = img.getAttribute('width');
+            // Skip small images (profile pics, icons)
+            if (width && parseInt(width) < 100) continue;
+            if (src.includes('50x50') || src.includes('40x40') || src.includes('_s.')) continue;
+            imageUrl = src;
+            break;
           }
 
-          // Extract video
-          const videoElement = post.querySelector('video');
-          const videoUrl = videoElement?.getAttribute('src') || null;
+          // Check for video
+          const video = container.querySelector('video');
+          const videoUrl = video?.getAttribute('src') || null;
 
-          // Extract metrics (likes, comments, shares, views)
-          const metricsText = post.textContent || '';
-          const parseNum = (str: string | undefined) => {
-            if (!str) return 0;
-            // Handle K/M suffixes
-            const cleaned = str.replace(/,/g, '');
-            if (cleaned.includes('K')) return parseFloat(cleaned) * 1000;
-            if (cleaned.includes('M')) return parseFloat(cleaned) * 1000000;
-            return parseInt(cleaned, 10) || 0;
-          };
-
-          // Match various patterns for metrics
-          const likesMatch = metricsText.match(/(\d+(?:[.,]\d+)?[KM]?)\s*(?:likes?|reactions?|אהבו)/i);
-          const commentsMatch = metricsText.match(/(\d+(?:[.,]\d+)?[KM]?)\s*(?:comments?|תגובות)/i);
-          const sharesMatch = metricsText.match(/(\d+(?:[.,]\d+)?[KM]?)\s*(?:shares?|שיתופים)/i);
-          const viewsMatch = metricsText.match(/(\d+(?:[.,]\d+)?[KM]?)\s*(?:views?|צפיות)/i);
-
-          // Only add if we have meaningful content
-          if (text.length > 10 || imageUrl || videoUrl) {
-            results.push({
-              postId,
-              postUrl: postUrl || `https://www.facebook.com/${pageId}`,
-              text: text.slice(0, 5000), // Limit text length
-              authorName: pageId,
-              authorId: pageId,
-              timestamp,
-              likes: parseNum(likesMatch?.[1]),
-              comments: parseNum(commentsMatch?.[1]),
-              shares: parseNum(sharesMatch?.[1]),
-              views: parseNum(viewsMatch?.[1]),
-              imageUrl,
-              videoUrl,
-            });
-          }
+          results.push({
+            postId,
+            postUrl: postUrl || `https://www.facebook.com/${pageId}`,
+            text: postText.slice(0, 5000),
+            authorName: pageId,
+            authorId: pageId,
+            timestamp: new Date().toISOString(),
+            likes,
+            comments: commentsMatch ? parseInt(commentsMatch[1]) : 0,
+            shares: sharesMatch ? parseInt(sharesMatch[1]) : 0,
+            views: parseNum(viewsMatch?.[1]),
+            imageUrl,
+            videoUrl,
+          });
         } catch (e) {
           // Skip problematic posts
-          console.error('Error extracting post:', e);
         }
       }
 
-      return results;
-    }, { pageId, maxItems });
+      return { posts: results, newSeenTexts: Array.from(seenSet) };
+    }, { pageId, seenArray });
 
-    return posts.map(post => this.transformPost(post));
+    // Update the seenTexts set with new entries
+    for (const text of posts.newSeenTexts) {
+      seenTexts.add(text);
+    }
+
+    return posts.posts;
   }
 
   async searchContent(query: string, options: FetchOptions = {}): Promise<RawContentItem[]> {
