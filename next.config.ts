@@ -24,6 +24,9 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'nitter.woodland.cafe' },
       { protocol: 'https', hostname: 'pbs.twimg.com' },
       { protocol: 'https', hostname: 'abs.twimg.com' },
+      // Facebook
+      { protocol: 'https', hostname: '*.fbcdn.net' },
+      { protocol: 'https', hostname: '*.fna.fbcdn.net' },
       // Zehut logo
       { protocol: 'https', hostname: 'en.idi.org.il' },
     ],
