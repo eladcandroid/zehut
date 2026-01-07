@@ -109,17 +109,18 @@ export class FacebookScraper extends BaseScraper {
         throw new Error('Facebook requires login - cookies may have expired');
       }
 
-      // Extract posts WHILE scrolling (Facebook virtualizes - removes posts as you scroll)
+      // Extract posts WHILE scrolling - scroll slowly so each post becomes "active"
+      // Facebook only shows timestamp for the currently active/focused post
       const allPosts: FacebookPost[] = [];
       const seenTexts = new Set<string>();
-      const maxScrolls = Math.min(Math.ceil(maxItems * 1.5), 200);
+      const maxScrolls = Math.min(maxItems * 3, 500); // More scrolls needed since we get ~1 post per scroll
       let noNewPostsCount = 0;
       let lastPostCount = 0;
 
       console.log(`[Facebook] Starting incremental extraction (target: ${maxItems} posts)...`);
 
       for (let i = 0; i < maxScrolls && allPosts.length < maxItems; i++) {
-        // Extract current visible posts
+        // Extract the currently active post (the one with visible timestamp)
         const newPosts = await this.extractVisiblePosts(page, pageId, seenTexts);
 
         for (const post of newPosts) {
@@ -130,7 +131,7 @@ export class FacebookScraper extends BaseScraper {
         // Check if we got new posts
         if (allPosts.length === lastPostCount) {
           noNewPostsCount++;
-          if (noNewPostsCount >= 10) {
+          if (noNewPostsCount >= 20) { // Increased threshold
             console.log(`[Facebook] No new posts after ${i + 1} scrolls, stopping`);
             break;
           }
@@ -139,12 +140,12 @@ export class FacebookScraper extends BaseScraper {
           lastPostCount = allPosts.length;
         }
 
-        // Scroll down
-        await page.evaluate(() => window.scrollBy(0, 800));
-        await page.waitForTimeout(1000);
+        // Scroll by smaller amount to ensure each post becomes active
+        await page.evaluate(() => window.scrollBy(0, 400));
+        await page.waitForTimeout(800);
 
         // Log progress
-        if ((i + 1) % 10 === 0) {
+        if ((i + 1) % 20 === 0) {
           console.log(`[Facebook] Scroll ${i + 1}: collected ${allPosts.length}/${maxItems} posts`);
         }
       }
@@ -170,12 +171,13 @@ export class FacebookScraper extends BaseScraper {
   private async extractVisiblePosts(page: Page, pageId: string, seenTexts: Set<string>): Promise<FacebookPost[]> {
     const seenArray = Array.from(seenTexts);
 
+    // New strategy: Find the ONE visible time link, extract THAT post
+    // Facebook only renders timestamp for the "active" post in viewport
     const posts = await page.evaluate((args) => {
       const { pageId, seenArray } = args;
       const seenSet = new Set(seenArray);
       const results: any[] = [];
 
-      // Helper to parse numbers with K/M suffixes
       const parseNum = (str: string | undefined) => {
         if (!str) return 0;
         const cleaned = str.replace(/,/g, '');
@@ -184,36 +186,50 @@ export class FacebookScraper extends BaseScraper {
         return parseInt(cleaned, 10) || 0;
       };
 
-      // Find posts by looking for Like count elements (aria-label="Like: X people")
-      const allElements = Array.from(document.querySelectorAll('*'));
-      const likeCountElements = allElements.filter(el => {
-        const aria = el.getAttribute('aria-label') || '';
-        return aria.match(/Like:\s*\d+/);
+      // Find ALL time links (format: "17h", "2d", "1w", etc.)
+      const allLinks = Array.from(document.querySelectorAll('a'));
+      const timeLinks = allLinks.filter(a => {
+        const text = a.textContent?.trim() || '';
+        return /^\d+(h|d|w|mo|y)$/.test(text);
       });
 
-      for (const likeEl of likeCountElements) {
+      // Extract a post from each time link found
+      for (const timeLink of timeLinks) {
         try {
-          // Get like count from aria-label
-          const ariaLabel = likeEl.getAttribute('aria-label') || '';
-          const likesMatch = ariaLabel.match(/Like:\s*(\d+)/);
-          const likes = likesMatch ? parseInt(likesMatch[1]) : 0;
+          const timeText = timeLink.textContent?.trim() || '';
+          const postUrl = timeLink.getAttribute('href') || '';
 
-          // Traverse up to find post container (14 levels up is optimal)
-          let container = likeEl;
-          for (let i = 0; i < 14; i++) {
+          // Parse the relative time
+          const timeMatch = timeText.match(/^(\d+)(h|d|w|mo|y)$/);
+          let timestamp = new Date().toISOString();
+          if (timeMatch) {
+            const num = parseInt(timeMatch[1]);
+            const unit = timeMatch[2];
+            const date = new Date();
+            switch (unit) {
+              case 'h': date.setHours(date.getHours() - num); break;
+              case 'd': date.setDate(date.getDate() - num); break;
+              case 'w': date.setDate(date.getDate() - num * 7); break;
+              case 'mo': date.setMonth(date.getMonth() - num); break;
+              case 'y': date.setFullYear(date.getFullYear() - num); break;
+            }
+            timestamp = date.toISOString();
+          }
+
+          // Traverse UP from time link to find post container (need ~18 levels to reach full post)
+          let container: Element = timeLink;
+          for (let i = 0; i < 18; i++) {
             if (!container.parentElement) break;
             container = container.parentElement;
           }
 
-          // Extract all text from container
+          // Extract post text
           const allText = (container as HTMLElement).innerText || '';
           const lines = allText.split('\n').filter(l => l.trim().length > 15);
 
-          // Find main post text (Hebrew text, not page name or button labels)
           let postText = '';
           for (const line of lines) {
             const trimmed = line.trim();
-            // Skip if it's the page name, button text, or reaction names
             if (trimmed.includes('מפלגת זהות') ||
                 trimmed.includes('Like') ||
                 trimmed.includes('Comment') ||
@@ -223,7 +239,6 @@ export class FacebookScraper extends BaseScraper {
                 trimmed.match(/and \d+ others$/)) {
               continue;
             }
-            // Look for Hebrew content or substantial English text
             if ((trimmed.match(/[\u0590-\u05FF]/) && trimmed.length > 20) ||
                 (trimmed.length > 50 && !trimmed.includes('Verified'))) {
               postText = trimmed;
@@ -231,86 +246,62 @@ export class FacebookScraper extends BaseScraper {
             }
           }
 
-          // Skip if no text or already seen
           if (!postText || postText.length < 15) continue;
 
           const textKey = postText.slice(0, 100);
           if (seenSet.has(textKey)) continue;
           seenSet.add(textKey);
 
-          // Find post URL from links with pfbid or post patterns
-          let postUrl = '';
+          // Extract post ID from URL
           let postId = '';
-          const links = container.querySelectorAll('a[href*="pfbid"], a[href*="/posts/"]');
-          for (const link of links) {
-            const href = link.getAttribute('href') || '';
-            if (href.includes('pfbid') || href.includes('/posts/')) {
-              postUrl = href.startsWith('http') ? href : `https://www.facebook.com${href}`;
-              // Extract ID from pfbid or posts URL
-              const pfbidMatch = href.match(/pfbid([a-zA-Z0-9]+)/);
-              const postsMatch = href.match(/\/posts\/(\d+)/);
-              postId = pfbidMatch?.[1] || postsMatch?.[1] || '';
-              break;
-            }
-          }
+          const pfbidMatch = postUrl.match(/pfbid([a-zA-Z0-9]+)/);
+          const postsMatch = postUrl.match(/\/posts\/(\d+)/);
+          postId = pfbidMatch?.[1] || postsMatch?.[1] || `fb-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-          if (!postId) {
-            postId = `fb-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-          }
+          // Find Like count in container
+          const likeEl = container.querySelector('[aria-label*="Like:"]');
+          const likeLabel = likeEl?.getAttribute('aria-label') || '';
+          const likesMatch = likeLabel.match(/Like:\s*(\d+)/);
+          const likes = likesMatch ? parseInt(likesMatch[1]) : 0;
 
-          // Extract metrics from container text
-          const commentsMatch = allText.match(/(\d+)\s*comment/i);
-          const sharesMatch = allText.match(/(\d+)\s*share/i);
-          const viewsMatch = allText.match(/([\d.]+[KM]?)\s*views?/i);
+          // Extract metrics - include Hebrew patterns
+          const commentsMatch = allText.match(/(\d+)\s*(comment|תגובו)/i);
+          const sharesMatch = allText.match(/(\d+)\s*(share|שיתופ)/i);
+          // Views: "1.2K views", "5K צפיות", "1,234 views"
+          const viewsMatch = allText.match(/([\d,.]+[KM]?)\s*(views?|צפיות)/i);
 
-          // Extract timestamp - look for time text in container's text content
-          // Facebook shows relative times like "17h", "2d", "1w", "3mo"
-          let timestamp = new Date().toISOString();
-          const containerText = (container as HTMLElement).innerText || '';
-          // Match relative time patterns anywhere in the text
-          const timePatterns = [
-            /\b(\d+)h\b/,      // hours
-            /\b(\d+)d\b/,      // days
-            /\b(\d+)w\b/,      // weeks
-            /\b(\d+)mo\b/,     // months
-            /\b(\d+)y\b/,      // years
-          ];
-
-          for (const pattern of timePatterns) {
-            const match = containerText.match(pattern);
-            if (match) {
-              const num = parseInt(match[1]);
-              const now = new Date();
-              if (pattern.source.includes('h')) now.setHours(now.getHours() - num);
-              else if (pattern.source.includes('mo')) now.setMonth(now.getMonth() - num);
-              else if (pattern.source.includes('d')) now.setDate(now.getDate() - num);
-              else if (pattern.source.includes('w')) now.setDate(now.getDate() - num * 7);
-              else if (pattern.source.includes('y')) now.setFullYear(now.getFullYear() - num);
-              timestamp = now.toISOString();
-              break;
-            }
-          }
-
-          // Find images (skip small ones and profile pics)
-          const images = container.querySelectorAll('img[src*="scontent"]');
+          // Find image - look for post images (larger than profile pics)
+          const images = container.querySelectorAll('img');
           let imageUrl: string | null = null;
           for (const img of images) {
             const src = img.getAttribute('src') || '';
-            const width = img.getAttribute('width');
             // Skip small images (profile pics, icons)
-            if (width && parseInt(width) < 100) continue;
-            if (src.includes('50x50') || src.includes('40x40') || src.includes('_s.')) continue;
-            imageUrl = src;
-            break;
+            if (src.includes('50x50') || src.includes('40x40') || src.includes('_s.') ||
+                src.includes('emoji') || src.includes('rsrc.php')) continue;
+            // Prefer scontent (Facebook CDN) images
+            if (src.includes('scontent') || src.includes('fbcdn')) {
+              // Check image dimensions if available
+              const width = (img as HTMLImageElement).naturalWidth || (img as HTMLImageElement).width || 0;
+              if (width > 100 || !imageUrl) {
+                imageUrl = src;
+                if (width > 200) break; // Found a good-sized image
+              }
+            }
           }
 
-          // Check for video
+          // Also look for video poster/thumbnail
           const video = container.querySelector('video');
           const videoUrl = video?.getAttribute('src') || null;
+          const videoPoster = video?.getAttribute('poster') || null;
+
+          // If no image found but video has poster, use that
+          if (!imageUrl && videoPoster) {
+            imageUrl = videoPoster;
+          }
 
           results.push({
             postId,
-            postUrl: postUrl || `https://www.facebook.com/${pageId}`,
+            postUrl: postUrl.startsWith('http') ? postUrl : `https://www.facebook.com${postUrl}`,
             text: postText.slice(0, 5000),
             authorName: pageId,
             authorId: pageId,
@@ -318,7 +309,7 @@ export class FacebookScraper extends BaseScraper {
             likes,
             comments: commentsMatch ? parseInt(commentsMatch[1]) : 0,
             shares: sharesMatch ? parseInt(sharesMatch[1]) : 0,
-            views: parseNum(viewsMatch?.[1]),
+            views: viewsMatch ? parseNum(viewsMatch[1]) : 0,
             imageUrl,
             videoUrl,
           });
@@ -330,7 +321,6 @@ export class FacebookScraper extends BaseScraper {
       return { posts: results, newSeenTexts: Array.from(seenSet) };
     }, { pageId, seenArray });
 
-    // Update the seenTexts set with new entries
     for (const text of posts.newSeenTexts) {
       seenTexts.add(text);
     }
