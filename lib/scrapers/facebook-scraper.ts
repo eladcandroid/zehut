@@ -198,15 +198,15 @@ export class FacebookScraper extends BaseScraper {
           const likesMatch = ariaLabel.match(/Like:\s*(\d+)/);
           const likes = likesMatch ? parseInt(likesMatch[1]) : 0;
 
-          // Traverse up to find post container (about 15-20 levels up)
+          // Traverse up to find post container (14 levels up is optimal)
           let container = likeEl;
-          for (let i = 0; i < 20; i++) {
+          for (let i = 0; i < 14; i++) {
             if (!container.parentElement) break;
             container = container.parentElement;
           }
 
           // Extract all text from container
-          const allText = container.innerText || '';
+          const allText = (container as HTMLElement).innerText || '';
           const lines = allText.split('\n').filter(l => l.trim().length > 15);
 
           // Find main post text (Hebrew text, not page name or button labels)
@@ -263,35 +263,31 @@ export class FacebookScraper extends BaseScraper {
           const sharesMatch = allText.match(/(\d+)\s*share/i);
           const viewsMatch = allText.match(/([\d.]+[KM]?)\s*views?/i);
 
-          // Extract timestamp from relative time links (e.g., "17h", "1d", "1w", "2mo")
+          // Extract timestamp - look for time text in container's text content
+          // Facebook shows relative times like "17h", "2d", "1w", "3mo"
           let timestamp = new Date().toISOString();
-          const timeLinks = container.querySelectorAll('a[href*="__cft"]');
-          for (const timeLink of timeLinks) {
-            const text = timeLink.textContent?.trim() || '';
-            // Match patterns like "17h", "1d", "2w", "3mo", "1y"
-            const relTimeMatch = text.match(/^(\d+)(h|d|w|mo|y)$/);
-            if (relTimeMatch) {
-              const num = parseInt(relTimeMatch[1]);
-              const unit = relTimeMatch[2];
+          const containerText = (container as HTMLElement).innerText || '';
+          // Match relative time patterns anywhere in the text
+          const timePatterns = [
+            /\b(\d+)h\b/,      // hours
+            /\b(\d+)d\b/,      // days
+            /\b(\d+)w\b/,      // weeks
+            /\b(\d+)mo\b/,     // months
+            /\b(\d+)y\b/,      // years
+          ];
+
+          for (const pattern of timePatterns) {
+            const match = containerText.match(pattern);
+            if (match) {
+              const num = parseInt(match[1]);
               const now = new Date();
-              switch (unit) {
-                case 'h': now.setHours(now.getHours() - num); break;
-                case 'd': now.setDate(now.getDate() - num); break;
-                case 'w': now.setDate(now.getDate() - num * 7); break;
-                case 'mo': now.setMonth(now.getMonth() - num); break;
-                case 'y': now.setFullYear(now.getFullYear() - num); break;
-              }
+              if (pattern.source.includes('h')) now.setHours(now.getHours() - num);
+              else if (pattern.source.includes('mo')) now.setMonth(now.getMonth() - num);
+              else if (pattern.source.includes('d')) now.setDate(now.getDate() - num);
+              else if (pattern.source.includes('w')) now.setDate(now.getDate() - num * 7);
+              else if (pattern.source.includes('y')) now.setFullYear(now.getFullYear() - num);
               timestamp = now.toISOString();
               break;
-            }
-            // Also check aria-label for full date
-            const ariaLabel = timeLink.getAttribute('aria-label') || '';
-            if (ariaLabel.match(/\d{1,2},?\s*\d{4}|January|February|March|April|May|June|July|August|September|October|November|December/i)) {
-              const parsed = new Date(ariaLabel);
-              if (!isNaN(parsed.getTime())) {
-                timestamp = parsed.toISOString();
-                break;
-              }
             }
           }
 

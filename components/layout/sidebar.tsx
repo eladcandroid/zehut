@@ -7,6 +7,7 @@ import {
   InstagramLogo,
   TelegramLogo,
   XLogo,
+  FacebookLogo,
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
@@ -24,6 +25,11 @@ const platformFilters: FilterOption[] = [
     value: 'youtube',
     label: 'יוטיוב',
     icon: <YoutubeLogo weight="fill" className="w-4 h-4 text-red-500" />,
+  },
+  {
+    value: 'facebook',
+    label: 'פייסבוק',
+    icon: <FacebookLogo weight="fill" className="w-4 h-4 text-blue-600" />,
   },
   {
     value: 'telegram',

@@ -83,3 +83,32 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    await connectDB();
+
+    const { searchParams } = new URL(request.url);
+    const platform = searchParams.get('platform') as Platform | null;
+
+    if (!platform) {
+      return NextResponse.json(
+        { error: 'Platform parameter is required' },
+        { status: 400 }
+      );
+    }
+
+    const result = await Content.deleteMany({ platform });
+
+    return NextResponse.json({
+      message: `Deleted ${result.deletedCount} ${platform} items`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error('Error deleting content:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete content' },
+      { status: 500 }
+    );
+  }
+}
