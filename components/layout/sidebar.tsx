@@ -13,6 +13,11 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import type { Platform } from '@/lib/db/models/content';
 
+export interface PopularTag {
+  tag: string;
+  count: number;
+}
+
 interface FilterOption {
   value: Platform | 'all';
   label: string;
@@ -71,6 +76,9 @@ interface SidebarProps {
   onPlatformChange: (platform: Platform | 'all') => void;
   selectedSort: string;
   onSortChange: (sort: string) => void;
+  selectedTags?: string[];
+  onTagsChange?: (tags: string[]) => void;
+  popularTags?: PopularTag[];
   className?: string;
 }
 
@@ -81,8 +89,24 @@ export function Sidebar({
   onPlatformChange,
   selectedSort,
   onSortChange,
+  selectedTags = [],
+  onTagsChange,
+  popularTags = [],
   className,
 }: SidebarProps) {
+  const handleTagClick = (tag: string) => {
+    if (!onTagsChange) return;
+
+    if (selectedTags.includes(tag)) {
+      onTagsChange(selectedTags.filter((t) => t !== tag));
+    } else {
+      onTagsChange([...selectedTags, tag]);
+    }
+  };
+
+  const clearTags = () => {
+    onTagsChange?.([]);
+  };
   return (
     <>
       {/* Mobile overlay */}
@@ -136,7 +160,7 @@ export function Sidebar({
         </div>
 
         {/* Sort Options */}
-        <div>
+        <div className="mb-6">
           <h3 className="text-sm font-medium text-[var(--color-muted)] mb-3">
             מיון
           </h3>
@@ -157,6 +181,55 @@ export function Sidebar({
             ))}
           </div>
         </div>
+
+        {/* Tags Filter */}
+        {popularTags.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-[var(--color-muted)]">
+                תגיות
+              </h3>
+              {selectedTags.length > 0 && (
+                <button
+                  onClick={clearTags}
+                  className="text-xs text-[var(--color-primary)] hover:underline"
+                >
+                  נקה בחירה
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {popularTags.map(({ tag, count }) => (
+                <span
+                  key={tag}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleTagClick(tag)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleTagClick(tag);
+                    }
+                  }}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2 py-1 text-xs rounded-[var(--radius-sm)] transition-colors cursor-pointer',
+                    selectedTags.includes(tag)
+                      ? 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]'
+                      : 'bg-[var(--color-border-subtle)] text-[var(--color-secondary)] hover:bg-[var(--color-border)]'
+                  )}
+                >
+                  <span>{tag}</span>
+                  <span className={cn(
+                    'text-[10px]',
+                    selectedTags.includes(tag) ? 'text-white/70' : 'text-[var(--color-muted)]'
+                  )}>
+                    ({count})
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </aside>
     </>
   );

@@ -12,11 +12,20 @@ export async function GET(request: NextRequest) {
     const platform = searchParams.get('platform') as Platform | null;
     const sort = searchParams.get('sort') || 'newest';
     const search = searchParams.get('search');
+    const tags = searchParams.get('tags');
 
     const query: Record<string, unknown> = { isActive: true };
 
     if (platform) {
       query.platform = platform;
+    }
+
+    // Filter by tags (OR logic - content with ANY of the selected tags)
+    if (tags) {
+      const tagArray = tags.split(',').map((t) => t.trim()).filter(Boolean);
+      if (tagArray.length > 0) {
+        query.tags = { $in: tagArray };
+      }
     }
 
     if (search) {

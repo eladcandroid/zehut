@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from '@/components/layout/header';
-import { Sidebar } from '@/components/layout/sidebar';
+import { Sidebar, type PopularTag } from '@/components/layout/sidebar';
 import { SearchBar } from '@/components/filters/search-bar';
 import { ContentGrid, type ContentCardData } from '@/components/content';
 import { useVisitor } from '@/lib/hooks/use-visitor';
@@ -24,14 +24,30 @@ export default function HomePage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>('all');
   const [selectedSort, setSelectedSort] = useState('newest');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [content, setContent] = useState<ContentCardData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [popularTags, setPopularTags] = useState<PopularTag[]>([]);
 
   // Initialize visitor tracking
   useVisitor();
+
+  // Fetch popular tags on mount
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const response = await fetch('/api/tags?limit=15');
+        const data = await response.json();
+        setPopularTags(data.tags || []);
+      } catch (error) {
+        console.error('Error fetching tags:', error);
+      }
+    };
+    fetchTags();
+  }, []);
 
   const fetchContent = useCallback(async (reset = false) => {
     try {
@@ -46,6 +62,10 @@ export default function HomePage() {
 
       if (selectedPlatform !== 'all') {
         params.set('platform', selectedPlatform);
+      }
+
+      if (selectedTags.length > 0) {
+        params.set('tags', selectedTags.join(','));
       }
 
       if (search) {
@@ -73,12 +93,12 @@ export default function HomePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, selectedPlatform, selectedSort, search]);
+  }, [page, selectedPlatform, selectedSort, selectedTags, search]);
 
   // Initial fetch and when filters change
   useEffect(() => {
     fetchContent(true);
-  }, [selectedPlatform, selectedSort]);
+  }, [selectedPlatform, selectedSort, selectedTags]);
 
   // Debounced search
   useEffect(() => {
@@ -140,6 +160,9 @@ export default function HomePage() {
             setSelectedSort(sort);
             setSidebarOpen(false);
           }}
+          selectedTags={selectedTags}
+          onTagsChange={setSelectedTags}
+          popularTags={popularTags}
         />
 
         <main className="flex-1 p-6 lg:p-8">

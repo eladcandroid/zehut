@@ -6,6 +6,7 @@ import { Eye, Heart, Play } from '@phosphor-icons/react';
 import { Card } from '@/components/ui/card';
 import { PlatformBadge } from './platform-badge';
 import { ShareMenu } from './share-menu';
+import { TagList } from './tag-badge';
 import { formatRelativeTime, formatNumber } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import type { Platform, ContentType } from '@/lib/db/models/content';
@@ -29,6 +30,7 @@ export interface ContentCardData {
   };
   shareCount: number;
   publishedAt: string;
+  tags?: string[];
 }
 
 interface ContentCardProps {
@@ -129,6 +131,11 @@ export function ContentCard({ content, className }: ContentCardProps) {
             </span>
           )}
         </div>
+
+        {/* Tags */}
+        {content.tags && content.tags.length > 0 && (
+          <TagList tags={content.tags} maxDisplay={3} className="mb-3" />
+        )}
 
         {/* Share */}
         <div className="mt-auto pt-2">

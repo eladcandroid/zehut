@@ -1,4 +1,5 @@
 import type { Platform, ContentType, IAuthor, IPlatformMetrics } from '@/lib/db/models/content';
+import { generateTags } from '@/lib/tagging/auto-tagger';
 
 export interface FetchOptions {
   maxItems?: number;
@@ -57,10 +58,8 @@ export abstract class BaseScraper {
       .trim();
   }
 
-  protected extractTags(text: string): string[] {
-    const hashtagRegex = /#[\u0590-\u05FFa-zA-Z0-9_]+/g;
-    const matches = text.match(hashtagRegex);
-    return matches ? matches.map((tag) => tag.slice(1)) : [];
+  protected extractTags(title: string, description?: string): string[] {
+    return generateTags(title, description || '');
   }
 
   protected detectLanguage(text: string): string {

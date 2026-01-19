@@ -223,7 +223,7 @@ export class YouTubeScraper extends BaseScraper {
       },
       publishedAt: new Date(snippet.publishedAt || ''),
       tags: [
-        ...this.extractTags(snippet.description || ''),
+        ...this.extractTags(snippet.title || '', snippet.description || ''),
         ...(snippet.tags || []),
       ],
       language: this.detectLanguage(snippet.title || ''),
