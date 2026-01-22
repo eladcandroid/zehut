@@ -86,11 +86,16 @@ export default function AdminContentPage() {
     if (!confirm(`האם אתה בטוח שברצונך למחוק ${selectedIds.size} פריטים?`)) return;
 
     try {
-      await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          fetch(`/api/content/${id}`, { method: 'DELETE' })
-        )
-      );
+      const response = await fetch('/api/content/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) })
+      });
+
+      if (!response.ok) {
+        throw new Error('Bulk delete failed');
+      }
+
       setContent((prev) => prev.filter((item) => !selectedIds.has(item._id)));
       setSelectedIds(new Set());
     } catch (error) {
@@ -100,11 +105,24 @@ export default function AdminContentPage() {
 
   const handleBulkToggleVisibility = async () => {
     try {
-      await Promise.all(
-        Array.from(selectedIds).map((id) =>
-          fetch(`/api/content/${id}/toggle-visibility`, { method: 'PATCH' })
-        )
-      );
+      // Determine toggle state: if any selected items are visible, hide all; otherwise show all
+      const selectedItems = content.filter(item => selectedIds.has(item._id));
+      const anyVisible = selectedItems.some(item => item.isActive !== false);
+      const newIsActive = !anyVisible;
+
+      const response = await fetch('/api/content/bulk-toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: Array.from(selectedIds),
+          isActive: newIsActive
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Bulk toggle failed');
+      }
+
       await fetchContent();
       setSelectedIds(new Set());
     } catch (error) {
