@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db/connection';
 import { Content, FetchJob, type Platform } from '@/lib/db/models';
-import { getScraper, type RawContentItem, type FetchProgress } from '@/lib/scrapers';
+import { getScraper, isRelevantContent, type RawContentItem, type FetchProgress } from '@/lib/scrapers';
 
 export async function POST(request: NextRequest) {
   try {
@@ -82,9 +82,28 @@ export async function POST(request: NextRequest) {
       errorMessages.push(errorMessage);
     }
 
-    // Save items to database
-    let newItems = 0;
+    // Filter items for relevance before saving
+    const filteredItems: RawContentItem[] = [];
+    let filteredCount = 0;
+
     for (const item of items) {
+      const validation = isRelevantContent(
+        item.title,
+        item.description || '',
+        item.author?.id || ''
+      );
+
+      if (!validation.isRelevant) {
+        console.log(`[Filter] Skipping "${item.title.slice(0, 50)}...": ${validation.reason}`);
+        filteredCount++;
+      } else {
+        filteredItems.push(item);
+      }
+    }
+
+    // Save filtered items to database
+    let newItems = 0;
+    for (const item of filteredItems) {
       try {
         await Content.findOneAndUpdate(
           { platform: item.platform, platformId: item.platformId },
@@ -125,6 +144,7 @@ export async function POST(request: NextRequest) {
           lastRun: new Date(),
           lastResult: {
             itemsFetched: items.length,
+            filteredCount,
             newItems,
             errorMessages,
             duration,
@@ -141,6 +161,7 @@ export async function POST(request: NextRequest) {
       sourceId,
       searchQuery,
       itemsFetched: items.length,
+      filteredCount,
       newItems,
       errorMessages,
       duration,
