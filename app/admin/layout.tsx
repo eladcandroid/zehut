@@ -1,8 +1,7 @@
-import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { ChartBar } from '@phosphor-icons/react/dist/ssr';
 import { AdminNav } from '@/components/layout/admin-nav';
+import { AdminHeader } from '@/components/layout/admin-header';
 
 export default async function AdminLayout({
   children,
@@ -18,24 +17,7 @@ export default async function AdminLayout({
   }
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
-      {/* Header */}
-      <header className="sticky top-0 z-40 h-14 px-4 flex items-center gap-4 bg-[var(--color-surface)] border-b border-[var(--color-border)]">
-        <Link href="/admin" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-[var(--radius-md)] bg-[var(--color-primary)] flex items-center justify-center">
-            <ChartBar weight="fill" className="w-4 h-4 text-white" />
-          </div>
-          <span className="text-lg font-semibold">ניהול</span>
-        </Link>
-
-        <div className="flex-1" />
-
-        <Link
-          href="/"
-          className="px-3 py-1.5 text-sm font-medium rounded-[var(--radius-md)] hover:bg-[var(--color-border-subtle)] transition-colors"
-        >
-          חזרה לאתר
-        </Link>
-      </header>
+      <AdminHeader />
 
       <div className="flex">
         {/* Sidebar */}
