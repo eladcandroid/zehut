@@ -5,6 +5,7 @@ import {
   ArrowsClockwise,
   Trash,
   Eye,
+  EyeSlash,
   ShareNetwork,
   MagnifyingGlass,
 } from '@phosphor-icons/react';
@@ -81,6 +82,36 @@ export default function AdminContentPage() {
     setSelectedIds(newSelected);
   };
 
+  const handleBulkDelete = async () => {
+    if (!confirm(`האם אתה בטוח שברצונך למחוק ${selectedIds.size} פריטים?`)) return;
+
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          fetch(`/api/content/${id}`, { method: 'DELETE' })
+        )
+      );
+      setContent((prev) => prev.filter((item) => !selectedIds.has(item._id)));
+      setSelectedIds(new Set());
+    } catch (error) {
+      alert('שגיאה במחיקת תכנים');
+    }
+  };
+
+  const handleBulkToggleVisibility = async () => {
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          fetch(`/api/content/${id}/toggle-visibility`, { method: 'PATCH' })
+        )
+      );
+      await fetchContent();
+      setSelectedIds(new Set());
+    } catch (error) {
+      alert('שגיאה בשינוי נראות התכנים');
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -120,6 +151,38 @@ export default function AdminContentPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Bulk Actions Toolbar */}
+      {selectedIds.size > 0 && (
+        <Card className="mb-4">
+          <CardContent className="py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                נבחרו {selectedIds.size} פריטים
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBulkToggleVisibility}
+                >
+                  <EyeSlash weight="regular" className="w-4 h-4" />
+                  <span>שנה נראות</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleBulkDelete}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash weight="regular" className="w-4 h-4" />
+                  <span>מחק</span>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Content Table */}
       <Card>
