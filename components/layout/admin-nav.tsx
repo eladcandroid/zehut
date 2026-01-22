@@ -6,12 +6,13 @@ import {
   House,
   FileText,
   ArrowsClockwise,
+  type Icon,
 } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils/cn';
 
 interface NavItem {
   href: string;
-  icon: React.ComponentType<{ weight?: string; className?: string }>;
+  icon: Icon;
   label: string;
 }
 

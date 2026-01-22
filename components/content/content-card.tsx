@@ -32,6 +32,7 @@ export interface ContentCardData {
   shareCount: number;
   publishedAt: string;
   tags?: string[];
+  isActive?: boolean;
 }
 
 interface ContentCardProps {
