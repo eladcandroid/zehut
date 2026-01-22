@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db/connection';
-import { Content, type Platform } from '@/lib/db/models';
+import { Content, type Platform, type ContentType } from '@/lib/db/models';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '12');
     const platform = searchParams.get('platform') as Platform | null;
+    const type = searchParams.get('type') as ContentType | null;
     const sort = searchParams.get('sort') || 'newest';
     const search = searchParams.get('search');
     const tags = searchParams.get('tags');
@@ -18,6 +19,10 @@ export async function GET(request: NextRequest) {
 
     if (platform) {
       query.platform = platform;
+    }
+
+    if (type) {
+      query.type = type;
     }
 
     // Filter by tags (OR logic - content with ANY of the selected tags)
@@ -99,7 +104,6 @@ export async function DELETE(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const platform = searchParams.get('platform') as Platform | null;
-    const badThumbnails = searchParams.get('badThumbnails') === 'true';
 
     if (!platform) {
       return NextResponse.json(
@@ -108,25 +112,10 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    let query: Record<string, unknown> = { platform };
-
-    // If badThumbnails flag is set, only delete items with CDN URLs or empty thumbnails
-    if (badThumbnails) {
-      query = {
-        platform,
-        $or: [
-          { thumbnailUrl: { $regex: '^https://' } },
-          { thumbnailUrl: '' },
-          { thumbnailUrl: null },
-          { thumbnailUrl: { $exists: false } },
-        ],
-      };
-    }
-
-    const result = await Content.deleteMany(query);
+    const result = await Content.deleteMany({ platform });
 
     return NextResponse.json({
-      message: `Deleted ${result.deletedCount} ${platform} items${badThumbnails ? ' with bad thumbnails' : ''}`,
+      message: `Deleted ${result.deletedCount} ${platform} items`,
       deletedCount: result.deletedCount,
     });
   } catch (error) {

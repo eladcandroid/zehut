@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from '@/components/layout/header';
-import { Sidebar } from '@/components/layout/sidebar';
+import { Sidebar, type PopularTag } from '@/components/layout/sidebar';
 import { SearchBar } from '@/components/filters/search-bar';
-import { ContentGrid, type ContentCardData, TagBadge } from '@/components/content';
+import { ContentGrid, type ContentCardData } from '@/components/content';
 import { useVisitor } from '@/lib/hooks/use-visitor';
 import { Spinner } from '@phosphor-icons/react';
-import type { Platform } from '@/lib/db/models/content';
+import type { Platform, ContentType } from '@/lib/db/models/content';
 
 interface ContentResponse {
   content: ContentCardData[];
@@ -20,15 +20,11 @@ interface ContentResponse {
   };
 }
 
-interface PopularTag {
-  tag: string;
-  count: number;
-}
-
 export default function HomePage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>('all');
   const [selectedSort, setSelectedSort] = useState('newest');
+  const [selectedContentType, setSelectedContentType] = useState<ContentType | 'all'>('all');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [content, setContent] = useState<ContentCardData[]>([]);
@@ -44,7 +40,7 @@ export default function HomePage() {
   useEffect(() => {
     const fetchTags = async () => {
       try {
-        const response = await fetch('/api/tags?limit=30');
+        const response = await fetch('/api/tags?limit=15');
         const data = await response.json();
         setPopularTags(data.tags || []);
       } catch (error) {
@@ -67,6 +63,10 @@ export default function HomePage() {
 
       if (selectedPlatform !== 'all') {
         params.set('platform', selectedPlatform);
+      }
+
+      if (selectedContentType !== 'all') {
+        params.set('type', selectedContentType);
       }
 
       if (selectedTags.length > 0) {
@@ -98,12 +98,12 @@ export default function HomePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, selectedPlatform, selectedSort, selectedTags, search]);
+  }, [page, selectedPlatform, selectedSort, selectedContentType, selectedTags, search]);
 
   // Initial fetch and when filters change
   useEffect(() => {
     fetchContent(true);
-  }, [selectedPlatform, selectedSort, selectedTags]);
+  }, [selectedPlatform, selectedSort, selectedContentType, selectedTags]);
 
   // Debounced search
   useEffect(() => {
@@ -165,6 +165,14 @@ export default function HomePage() {
             setSelectedSort(sort);
             setSidebarOpen(false);
           }}
+          selectedContentType={selectedContentType}
+          onContentTypeChange={(contentType) => {
+            setSelectedContentType(contentType);
+            setSidebarOpen(false);
+          }}
+          selectedTags={selectedTags}
+          onTagsChange={setSelectedTags}
+          popularTags={popularTags}
         />
 
         <main className="flex-1 p-6 lg:p-8">
@@ -186,36 +194,6 @@ export default function HomePage() {
                 className="w-full sm:w-64"
               />
             </div>
-
-            {/* Tags Filter */}
-            {popularTags.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm text-[var(--color-muted)]">תגיות:</span>
-                {popularTags.slice(0, 20).map(({ tag }) => (
-                  <TagBadge
-                    key={tag}
-                    tag={tag}
-                    selected={selectedTags.includes(tag)}
-                    onClick={(t) => {
-                      if (selectedTags.includes(t)) {
-                        setSelectedTags(selectedTags.filter((st) => st !== t));
-                      } else {
-                        setSelectedTags([...selectedTags, t]);
-                      }
-                    }}
-                    size="md"
-                  />
-                ))}
-                {selectedTags.length > 0 && (
-                  <button
-                    onClick={() => setSelectedTags([])}
-                    className="text-xs text-[var(--color-primary)] hover:underline ms-2"
-                  >
-                    נקה
-                  </button>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Content Grid */}
