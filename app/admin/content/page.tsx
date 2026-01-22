@@ -21,6 +21,7 @@ export default function AdminContentPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const fetchContent = async () => {
     try {
@@ -60,6 +61,24 @@ export default function AdminContentPage() {
     } catch (error) {
       console.error('Failed to delete content:', error);
     }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === content.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(content.map((item) => item._id)));
+    }
+  };
+
+  const handleSelectOne = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
   };
 
   return (
@@ -108,6 +127,14 @@ export default function AdminContentPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-[var(--color-border)]">
+                <th className="p-4 w-12">
+                  <input
+                    type="checkbox"
+                    checked={content.length > 0 && selectedIds.size === content.length}
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 rounded border-[var(--color-border)] cursor-pointer"
+                  />
+                </th>
                 <th className="text-start p-4 text-xs font-medium text-[var(--color-muted)]">
                   תוכן
                 </th>
@@ -131,13 +158,13 @@ export default function AdminContentPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-[var(--color-muted)]">
+                  <td colSpan={7} className="p-8 text-center text-[var(--color-muted)]">
                     טוען...
                   </td>
                 </tr>
               ) : content.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-[var(--color-muted)]">
+                  <td colSpan={7} className="p-8 text-center text-[var(--color-muted)]">
                     לא נמצא תוכן
                   </td>
                 </tr>
@@ -147,6 +174,14 @@ export default function AdminContentPage() {
                     key={item._id}
                     className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-background)]"
                   >
+                    <td className="p-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item._id)}
+                        onChange={() => handleSelectOne(item._id)}
+                        className="w-4 h-4 rounded border-[var(--color-border)] cursor-pointer"
+                      />
+                    </td>
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         {item.thumbnailUrl && (
