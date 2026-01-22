@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import { List } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
@@ -12,6 +13,8 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuClick, className }: HeaderProps) {
+  const pathname = usePathname();
+
   return (
     <header
       className={cn(
@@ -47,13 +50,23 @@ export function Header({ onMenuClick, className }: HeaderProps) {
       <nav className="hidden md:flex items-center gap-1">
         <Link
           href="/"
-          className="px-3 py-1.5 text-sm font-medium rounded-[var(--radius-md)] hover:bg-[var(--color-border-subtle)] transition-colors"
+          className={cn(
+            'px-3 py-1.5 text-sm font-medium rounded-[var(--radius-md)] transition-colors',
+            pathname === '/'
+              ? 'bg-[var(--color-accent)] text-[var(--color-primary-dark)]'
+              : 'hover:bg-[var(--color-border-subtle)]'
+          )}
         >
           תוכן
         </Link>
         <Link
           href="/admin"
-          className="px-3 py-1.5 text-sm font-medium rounded-[var(--radius-md)] hover:bg-[var(--color-border-subtle)] transition-colors"
+          className={cn(
+            'px-3 py-1.5 text-sm font-medium rounded-[var(--radius-md)] transition-colors',
+            pathname?.startsWith('/admin')
+              ? 'bg-[var(--color-accent)] text-[var(--color-primary-dark)]'
+              : 'hover:bg-[var(--color-border-subtle)]'
+          )}
         >
           ניהול
         </Link>
