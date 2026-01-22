@@ -5,6 +5,7 @@ import {
   ArrowsClockwise,
   Trash,
   Eye,
+  EyeSlash,
   ShareNetwork,
   MagnifyingGlass,
 } from '@phosphor-icons/react';
@@ -21,6 +22,7 @@ export default function AdminContentPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const fetchContent = async () => {
     try {
@@ -59,6 +61,72 @@ export default function AdminContentPage() {
       setContent((prev) => prev.filter((item) => item._id !== id));
     } catch (error) {
       console.error('Failed to delete content:', error);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === content.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(content.map((item) => item._id)));
+    }
+  };
+
+  const handleSelectOne = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`האם אתה בטוח שברצונך למחוק ${selectedIds.size} פריטים?`)) return;
+
+    try {
+      const response = await fetch('/api/content/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds) })
+      });
+
+      if (!response.ok) {
+        throw new Error('Bulk delete failed');
+      }
+
+      setContent((prev) => prev.filter((item) => !selectedIds.has(item._id)));
+      setSelectedIds(new Set());
+    } catch (error) {
+      alert('שגיאה במחיקת תכנים');
+    }
+  };
+
+  const handleBulkToggleVisibility = async () => {
+    try {
+      // Determine toggle state: if any selected items are visible, hide all; otherwise show all
+      const selectedItems = content.filter(item => selectedIds.has(item._id));
+      const anyVisible = selectedItems.some(item => item.isActive !== false);
+      const newIsActive = !anyVisible;
+
+      const response = await fetch('/api/content/bulk-toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: Array.from(selectedIds),
+          isActive: newIsActive
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Bulk toggle failed');
+      }
+
+      await fetchContent();
+      setSelectedIds(new Set());
+    } catch (error) {
+      alert('שגיאה בשינוי נראות התכנים');
     }
   };
 
@@ -102,12 +170,52 @@ export default function AdminContentPage() {
         </CardContent>
       </Card>
 
+      {/* Bulk Actions Toolbar */}
+      {selectedIds.size > 0 && (
+        <Card className="mb-4">
+          <CardContent className="py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                נבחרו {selectedIds.size} פריטים
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBulkToggleVisibility}
+                >
+                  <EyeSlash weight="regular" className="w-4 h-4" />
+                  <span>שנה נראות</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleBulkDelete}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash weight="regular" className="w-4 h-4" />
+                  <span>מחק</span>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Content Table */}
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-[var(--color-border)]">
+                <th className="p-4 w-12">
+                  <input
+                    type="checkbox"
+                    checked={content.length > 0 && selectedIds.size === content.length}
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 rounded border-[var(--color-border)] cursor-pointer"
+                  />
+                </th>
                 <th className="text-start p-4 text-xs font-medium text-[var(--color-muted)]">
                   תוכן
                 </th>
@@ -131,13 +239,13 @@ export default function AdminContentPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-[var(--color-muted)]">
+                  <td colSpan={7} className="p-8 text-center text-[var(--color-muted)]">
                     טוען...
                   </td>
                 </tr>
               ) : content.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-[var(--color-muted)]">
+                  <td colSpan={7} className="p-8 text-center text-[var(--color-muted)]">
                     לא נמצא תוכן
                   </td>
                 </tr>
@@ -147,6 +255,14 @@ export default function AdminContentPage() {
                     key={item._id}
                     className="border-b border-[var(--color-border-subtle)] hover:bg-[var(--color-background)]"
                   >
+                    <td className="p-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item._id)}
+                        onChange={() => handleSelectOne(item._id)}
+                        className="w-4 h-4 rounded border-[var(--color-border)] cursor-pointer"
+                      />
+                    </td>
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         {item.thumbnailUrl && (
