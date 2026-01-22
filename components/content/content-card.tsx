@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Eye, Heart, Play } from '@phosphor-icons/react';
@@ -40,6 +41,9 @@ interface ContentCardProps {
 
 export function ContentCard({ content, className }: ContentCardProps) {
   const isVideo = content.type === 'video' || content.type === 'reel';
+  const [imageError, setImageError] = useState(false);
+
+  const showPlaceholder = !content.thumbnailUrl || imageError;
 
   return (
     <Card hoverable className={cn('flex flex-col h-full', className)}>
@@ -50,13 +54,14 @@ export function ContentCard({ content, className }: ContentCardProps) {
         rel="noopener noreferrer"
         className="relative block aspect-video overflow-hidden rounded-t-[var(--radius-lg)] bg-[var(--color-border-subtle)]"
       >
-        {content.thumbnailUrl ? (
+        {!showPlaceholder ? (
           <Image
             src={content.thumbnailUrl}
             alt={content.title}
             fill
             className="object-cover transition-transform hover:scale-105"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            onError={() => setImageError(true)}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -118,7 +123,7 @@ export function ContentCard({ content, className }: ContentCardProps) {
 
         {/* Metrics */}
         <div className="flex items-center gap-4 text-xs text-[var(--color-muted)] mb-3">
-          {content.platformMetrics.views !== undefined && (
+          {content.platformMetrics.views !== undefined && content.platformMetrics.views > 0 && (
             <span className="inline-flex items-center gap-1 tabular-nums">
               <Eye weight="regular" className="w-3.5 h-3.5" />
               {formatNumber(content.platformMetrics.views)}

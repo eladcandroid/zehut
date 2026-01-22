@@ -63,7 +63,7 @@ export class YouTubeScraper extends BaseScraper {
     channelIdOrHandle: string,
     options: FetchOptions = {}
   ): Promise<RawContentItem[]> {
-    const { maxItems = 500, since } = options;
+    const { maxItems = 500, since, onProgress } = options;
     const items: RawContentItem[] = [];
 
     try {
@@ -123,9 +123,19 @@ export class YouTubeScraper extends BaseScraper {
         fetched += videoIds.length;
         pageToken = playlistResponse.data.nextPageToken || undefined;
 
+        // Report progress
+        if (onProgress) {
+          await onProgress({ fetched: items.length, total: maxItems, message: `מושך סרטונים...` });
+        }
+
         if (!pageToken) break;
 
         await this.delay(100); // Rate limiting
+      }
+
+      // Final progress
+      if (onProgress) {
+        await onProgress({ fetched: items.length, total: maxItems, message: `הושלם` });
       }
     } catch (error) {
       console.error('[YouTube] Error fetching content:', error);
@@ -138,7 +148,7 @@ export class YouTubeScraper extends BaseScraper {
     query: string,
     options: FetchOptions = {}
   ): Promise<RawContentItem[]> {
-    const { maxItems = 500, since } = options;
+    const { maxItems = 500, since, onProgress } = options;
     const items: RawContentItem[] = [];
 
     try {
@@ -176,9 +186,19 @@ export class YouTubeScraper extends BaseScraper {
         fetched += videoIds.length;
         pageToken = searchResponse.data.nextPageToken || undefined;
 
+        // Report progress
+        if (onProgress) {
+          await onProgress({ fetched: items.length, total: maxItems, message: `מחפש סרטונים...` });
+        }
+
         if (!pageToken) break;
 
         await this.delay(100);
+      }
+
+      // Final progress
+      if (onProgress) {
+        await onProgress({ fetched: items.length, total: maxItems, message: `הושלם` });
       }
     } catch (error) {
       console.error('[YouTube] Error searching content:', error);

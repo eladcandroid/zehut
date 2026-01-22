@@ -1,4 +1,4 @@
-export { BaseScraper, type FetchOptions, type RawContentItem, type SourceInfo, type FetchResult } from './base-scraper';
+export { BaseScraper, type FetchOptions, type FetchProgress, type RawContentItem, type SourceInfo, type FetchResult } from './base-scraper';
 export { YouTubeScraper, youtubeScraper } from './youtube-scraper';
 export { TelegramScraper, telegramScraper } from './telegram-scraper';
 export { XScraper, xScraper } from './x-scraper';

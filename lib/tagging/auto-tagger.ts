@@ -83,6 +83,34 @@ function isNoise(text: string): boolean {
 }
 
 /**
+ * Check if a tag is invalid (broken fragment, contains quotes, etc.)
+ */
+function isInvalidTag(tag: string): boolean {
+  // Contains any quotation marks or special punctuation
+  if (/["״׳''""«»„"‟‹›「」『』【】〈〉《》]/.test(tag)) return true;
+
+  // Pure Hebrew text that's too short (1-3 chars) - likely abbreviation fragment
+  if (/^[\u0590-\u05FF]{1,3}$/.test(tag)) return true;
+
+  // Single English word that's too short
+  if (/^[a-zA-Z]{1,2}$/.test(tag)) return true;
+
+  // Tag with spaces that's too long (sentence fragment)
+  if (tag.includes(' ') && tag.length > 25) return true;
+
+  // Starts with a short Hebrew word followed by long text (fragment pattern)
+  if (/^[\u0590-\u05FF]{2,3}\s+[\u0590-\u05FF\s]{10,}$/.test(tag)) return true;
+
+  // Contains only numbers or is mostly numbers
+  if (/^\d+$/.test(tag) || /^\d[\d\s,.]*$/.test(tag)) return true;
+
+  // URL-like patterns
+  if (/^(https?|www\.|\.com|\.co\.il)/i.test(tag)) return true;
+
+  return false;
+}
+
+/**
  * Extract hashtags from text
  */
 function extractHashtags(text: string): string[] {
@@ -209,7 +237,7 @@ export function generateTags(
     ...keywords,
   ];
 
-  // Deduplicate (case-insensitive), filter noise, and limit
+  // Deduplicate (case-insensitive), filter noise/broken tags, and limit
   const seen = new Set<string>();
   const uniqueTags: string[] = [];
 
@@ -219,7 +247,8 @@ export function generateTags(
       !seen.has(normalized) &&
       tag.length >= MIN_WORD_LENGTH &&
       !isNoise(tag) &&
-      !isStopword(tag)
+      !isStopword(tag) &&
+      !isInvalidTag(tag)
     ) {
       seen.add(normalized);
       uniqueTags.push(tag);

@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from '@/components/layout/header';
-import { Sidebar, type PopularTag } from '@/components/layout/sidebar';
+import { Sidebar } from '@/components/layout/sidebar';
 import { SearchBar } from '@/components/filters/search-bar';
-import { ContentGrid, type ContentCardData } from '@/components/content';
+import { ContentGrid, type ContentCardData, TagBadge } from '@/components/content';
 import { useVisitor } from '@/lib/hooks/use-visitor';
 import { Spinner } from '@phosphor-icons/react';
 import type { Platform } from '@/lib/db/models/content';
@@ -18,6 +18,11 @@ interface ContentResponse {
     totalPages: number;
     hasMore: boolean;
   };
+}
+
+interface PopularTag {
+  tag: string;
+  count: number;
 }
 
 export default function HomePage() {
@@ -39,7 +44,7 @@ export default function HomePage() {
   useEffect(() => {
     const fetchTags = async () => {
       try {
-        const response = await fetch('/api/tags?limit=15');
+        const response = await fetch('/api/tags?limit=30');
         const data = await response.json();
         setPopularTags(data.tags || []);
       } catch (error) {
@@ -160,9 +165,6 @@ export default function HomePage() {
             setSelectedSort(sort);
             setSidebarOpen(false);
           }}
-          selectedTags={selectedTags}
-          onTagsChange={setSelectedTags}
-          popularTags={popularTags}
         />
 
         <main className="flex-1 p-6 lg:p-8">
@@ -184,6 +186,36 @@ export default function HomePage() {
                 className="w-full sm:w-64"
               />
             </div>
+
+            {/* Tags Filter */}
+            {popularTags.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-[var(--color-muted)]">תגיות:</span>
+                {popularTags.slice(0, 20).map(({ tag }) => (
+                  <TagBadge
+                    key={tag}
+                    tag={tag}
+                    selected={selectedTags.includes(tag)}
+                    onClick={(t) => {
+                      if (selectedTags.includes(t)) {
+                        setSelectedTags(selectedTags.filter((st) => st !== t));
+                      } else {
+                        setSelectedTags([...selectedTags, t]);
+                      }
+                    }}
+                    size="md"
+                  />
+                ))}
+                {selectedTags.length > 0 && (
+                  <button
+                    onClick={() => setSelectedTags([])}
+                    className="text-xs text-[var(--color-primary)] hover:underline ms-2"
+                  >
+                    נקה
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Content Grid */}

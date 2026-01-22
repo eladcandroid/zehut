@@ -1,10 +1,17 @@
 import type { Platform, ContentType, IAuthor, IPlatformMetrics } from '@/lib/db/models/content';
 import { generateTags } from '@/lib/tagging/auto-tagger';
 
+export interface FetchProgress {
+  fetched: number;
+  total?: number;
+  message?: string;
+}
+
 export interface FetchOptions {
   maxItems?: number;
   since?: Date;
   searchQuery?: string;
+  onProgress?: (progress: FetchProgress) => void | Promise<void>;
 }
 
 export interface RawContentItem {

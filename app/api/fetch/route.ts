@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db/connection';
 import { Content, FetchJob, type Platform } from '@/lib/db/models';
-import { getScraper, type RawContentItem } from '@/lib/scrapers';
+import { getScraper, type RawContentItem, type FetchProgress } from '@/lib/scrapers';
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,13 +31,46 @@ export async function POST(request: NextRequest) {
     let items: RawContentItem[] = [];
     const errorMessages: string[] = [];
 
+    // Set job status to 'running' immediately
+    const jobSourceId = sourceId || searchQuery;
+    const jobSourceType = sourceId ? (sourceType || 'channel') : 'search';
+
+    await FetchJob.findOneAndUpdate(
+      { platform, sourceId: jobSourceId, sourceType: jobSourceType },
+      {
+        $set: {
+          platform,
+          sourceType: jobSourceType,
+          sourceId: jobSourceId,
+          sourceName: jobSourceId,
+          status: 'running',
+          lastRun: new Date(),
+          progress: { fetched: 0, total: maxItems, message: 'מתחיל...' },
+        },
+      },
+      { upsert: true }
+    );
+
+    // Progress callback - throttled to update every 2 seconds max
+    let lastProgressUpdate = 0;
+    const updateProgress = async (progress: FetchProgress) => {
+      const now = Date.now();
+      if (now - lastProgressUpdate < 2000) return; // Throttle to 2 seconds
+      lastProgressUpdate = now;
+
+      await FetchJob.findOneAndUpdate(
+        { platform, sourceId: jobSourceId, sourceType: jobSourceType },
+        { $set: { progress } }
+      );
+    };
+
     try {
       if (searchQuery) {
         // Search mode
-        items = await scraper.searchContent(searchQuery, { maxItems });
+        items = await scraper.searchContent(searchQuery, { maxItems, onProgress: updateProgress });
       } else if (sourceId) {
         // Fetch from specific source
-        items = await scraper.fetchContent(sourceId, { maxItems });
+        items = await scraper.fetchContent(sourceId, { maxItems, onProgress: updateProgress });
       } else {
         return NextResponse.json(
           { error: 'Either sourceId or searchQuery is required' },
@@ -79,10 +112,7 @@ export async function POST(request: NextRequest) {
 
     const duration = Date.now() - startTime;
 
-    // Update or create fetch job record
-    const jobSourceId = sourceId || searchQuery;
-    const jobSourceType = sourceId ? (sourceType || 'channel') : 'search';
-
+    // Update job with final status and clear progress
     await FetchJob.findOneAndUpdate(
       { platform, sourceId: jobSourceId, sourceType: jobSourceType },
       {
@@ -100,6 +130,7 @@ export async function POST(request: NextRequest) {
             duration,
           },
         },
+        $unset: { progress: 1 }, // Clear progress when done
       },
       { upsert: true }
     );
@@ -131,6 +162,13 @@ export async function GET(request: NextRequest) {
     const platform = searchParams.get('platform');
 
     const query = platform ? { platform } : {};
+
+    // Reset stale "running" jobs (running for more than 5 minutes)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    await FetchJob.updateMany(
+      { status: 'running', lastRun: { $lt: fiveMinutesAgo } },
+      { $set: { status: 'failed' }, $unset: { progress: 1 } }
+    );
 
     const jobs = await FetchJob.find(query)
       .sort({ lastRun: -1 })

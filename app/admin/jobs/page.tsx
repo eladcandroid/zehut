@@ -8,6 +8,8 @@ import {
   XCircle,
   Clock,
   Plus,
+  ArrowClockwise,
+  Stop,
 } from '@phosphor-icons/react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,6 +32,14 @@ interface FetchJob {
     errors: string[];
     duration: number;
   };
+  progress?: {
+    fetched: number;
+    total?: number;
+    message?: string;
+  };
+  config?: {
+    maxItems?: number;
+  };
   isEnabled: boolean;
 }
 
@@ -46,6 +56,8 @@ export default function AdminJobsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [runningJobId, setRunningJobId] = useState<string | null>(null);
+  const [stoppingJobId, setStoppingJobId] = useState<string | null>(null);
   const [newJob, setNewJob] = useState({
     platform: 'youtube',
     sourceType: 'search',
@@ -53,16 +65,16 @@ export default function AdminJobsPage() {
     maxItems: 50,
   });
 
-  const fetchJobs = async () => {
+  const fetchJobs = async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const response = await fetch('/api/fetch');
       const data = await response.json();
       setJobs(data);
     } catch (error) {
       console.error('Failed to fetch jobs:', error);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -70,8 +82,20 @@ export default function AdminJobsPage() {
     fetchJobs();
   }, []);
 
+  // Poll for updates while a job is running
+  useEffect(() => {
+    if (!runningJobId) return;
+
+    const pollInterval = setInterval(() => {
+      fetchJobs(true); // Silent poll to avoid loading flicker
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [runningJobId]);
+
   const runJob = async (job: FetchJob) => {
     try {
+      setRunningJobId(job._id);
       await fetch('/api/fetch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -80,11 +104,34 @@ export default function AdminJobsPage() {
           sourceId: job.sourceType === 'search' ? undefined : job.sourceId,
           searchQuery: job.sourceType === 'search' ? job.sourceId : undefined,
           sourceType: job.sourceType,
+          maxItems: job.config?.maxItems || 0, // 0 = unlimited
         }),
       });
       await fetchJobs();
     } catch (error) {
       console.error('Failed to run job:', error);
+    } finally {
+      setRunningJobId(null);
+    }
+  };
+
+  const stopJob = async (job: FetchJob) => {
+    try {
+      setStoppingJobId(job._id);
+      await fetch('/api/fetch/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: job.platform,
+          sourceId: job.sourceId,
+          sourceType: job.sourceType,
+        }),
+      });
+      await fetchJobs();
+    } catch (error) {
+      console.error('Failed to stop job:', error);
+    } finally {
+      setStoppingJobId(null);
     }
   };
 
@@ -124,7 +171,7 @@ export default function AdminJobsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={fetchJobs} variant="secondary" disabled={isLoading}>
+          <Button onClick={() => fetchJobs()} variant="secondary" disabled={isLoading}>
             <ArrowsClockwise
               weight="bold"
               className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
@@ -270,16 +317,29 @@ export default function AdminJobsPage() {
                         </div>
                       </td>
                       <td className="p-4">
-                        <Badge variant={status.variant} className="gap-1">
-                          <StatusIcon
-                            weight="fill"
-                            className={`w-3 h-3 ${job.status === 'running' ? 'animate-spin' : ''}`}
-                          />
-                          {status.label}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant={status.variant} className="gap-1">
+                            <StatusIcon
+                              weight="fill"
+                              className={`w-3 h-3 ${job.status === 'running' ? 'animate-spin' : ''}`}
+                            />
+                            {status.label}
+                          </Badge>
+                          {job.status === 'running' && job.progress && (
+                            <span className="text-xs text-[var(--color-primary)]">
+                              {job.progress.message}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-4">
-                        {job.lastResult ? (
+                        {job.status === 'running' && job.progress ? (
+                          <div className="text-xs">
+                            <p className="font-medium text-[var(--color-primary)]">
+                              {job.progress.fetched} פריטים
+                            </p>
+                          </div>
+                        ) : job.lastResult ? (
                           <div className="text-xs">
                             <p>
                               {job.lastResult.itemsFetched} פריטים ({job.lastResult.newItems} חדשים)
@@ -302,15 +362,50 @@ export default function AdminJobsPage() {
                         )}
                       </td>
                       <td className="p-4">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => runJob(job)}
-                          disabled={job.status === 'running'}
-                        >
-                          <Play weight="fill" className="w-4 h-4" />
-                          <span>הפעל</span>
-                        </Button>
+                        {job.status === 'running' ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => stopJob(job)}
+                            disabled={stoppingJobId === job._id}
+                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                          >
+                            {stoppingJobId === job._id ? (
+                              <>
+                                <ArrowsClockwise weight="bold" className="w-4 h-4 animate-spin" />
+                                <span>עוצר...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Stop weight="fill" className="w-4 h-4" />
+                                <span>עצור</span>
+                              </>
+                            )}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => runJob(job)}
+                            disabled={runningJobId === job._id}
+                          >
+                            {runningJobId === job._id ? (
+                              <>
+                                <ArrowsClockwise weight="bold" className="w-4 h-4 animate-spin" />
+                                <span>מריץ...</span>
+                              </>
+                            ) : (
+                              <>
+                                {job.lastRun ? (
+                                  <ArrowClockwise weight="bold" className="w-4 h-4" />
+                                ) : (
+                                  <Play weight="fill" className="w-4 h-4" />
+                                )}
+                                <span>{job.lastRun ? 'הרץ שוב' : 'הפעל'}</span>
+                              </>
+                            )}
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   );

@@ -99,6 +99,7 @@ export async function DELETE(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const platform = searchParams.get('platform') as Platform | null;
+    const badThumbnails = searchParams.get('badThumbnails') === 'true';
 
     if (!platform) {
       return NextResponse.json(
@@ -107,10 +108,25 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const result = await Content.deleteMany({ platform });
+    let query: Record<string, unknown> = { platform };
+
+    // If badThumbnails flag is set, only delete items with CDN URLs or empty thumbnails
+    if (badThumbnails) {
+      query = {
+        platform,
+        $or: [
+          { thumbnailUrl: { $regex: '^https://' } },
+          { thumbnailUrl: '' },
+          { thumbnailUrl: null },
+          { thumbnailUrl: { $exists: false } },
+        ],
+      };
+    }
+
+    const result = await Content.deleteMany(query);
 
     return NextResponse.json({
-      message: `Deleted ${result.deletedCount} ${platform} items`,
+      message: `Deleted ${result.deletedCount} ${platform} items${badThumbnails ? ' with bad thumbnails' : ''}`,
       deletedCount: result.deletedCount,
     });
   } catch (error) {

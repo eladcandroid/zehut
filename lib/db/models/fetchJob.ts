@@ -17,6 +17,12 @@ export interface IJobResult {
   duration: number;
 }
 
+export interface IJobProgress {
+  fetched: number;
+  total?: number;
+  message?: string;
+}
+
 export interface IFetchJob extends Document {
   platform: Platform;
   sourceType: SourceType;
@@ -27,6 +33,7 @@ export interface IFetchJob extends Document {
   lastRun?: Date;
   nextRun?: Date;
   lastResult?: IJobResult;
+  progress?: IJobProgress;
   cronExpression?: string;
   isEnabled: boolean;
 }
@@ -50,11 +57,20 @@ const JobResultSchema = new Schema<IJobResult>(
   { _id: false }
 );
 
+const JobProgressSchema = new Schema<IJobProgress>(
+  {
+    fetched: { type: Number, required: true },
+    total: { type: Number },
+    message: { type: String },
+  },
+  { _id: false }
+);
+
 const FetchJobSchema = new Schema<IFetchJob>(
   {
     platform: {
       type: String,
-      enum: ['youtube', 'tiktok', 'instagram', 'telegram', 'x'],
+      enum: ['youtube', 'tiktok', 'instagram', 'telegram', 'x', 'facebook'],
       required: true,
     },
     sourceType: {
@@ -73,6 +89,7 @@ const FetchJobSchema = new Schema<IFetchJob>(
     lastRun: { type: Date },
     nextRun: { type: Date },
     lastResult: { type: JobResultSchema },
+    progress: { type: JobProgressSchema },
     cronExpression: { type: String },
     isEnabled: { type: Boolean, default: true },
   },

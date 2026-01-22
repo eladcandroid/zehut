@@ -42,6 +42,10 @@ next-env.d.ts
 .mcp.json
 .env*.local
 
+# Downloaded content images (keep directory but ignore images)
+/public/images/content/*
+!/public/images/content/.gitkeep
+
 # Auto Claude data directory
 .auto-claude/
 
