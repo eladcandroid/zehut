@@ -1,18 +1,8 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import {
-  House,
-  FileText,
-  ArrowsClockwise,
-  ChartBar,
-} from '@phosphor-icons/react/dist/ssr';
-
-const navItems = [
-  { href: '/admin', icon: House, label: 'סקירה' },
-  { href: '/admin/content', icon: FileText, label: 'תוכן' },
-  { href: '/admin/jobs', icon: ArrowsClockwise, label: 'משימות' },
-];
+import { ChartBar } from '@phosphor-icons/react/dist/ssr';
+import { AdminNav } from '@/components/layout/admin-nav';
 
 export default async function AdminLayout({
   children,
@@ -50,18 +40,7 @@ export default async function AdminLayout({
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-56 shrink-0 border-e border-[var(--color-border)] bg-[var(--color-surface)] min-h-[calc(100vh-3.5rem)]">
-          <nav className="p-2">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex items-center gap-2 px-3 py-2 text-sm rounded-[var(--radius-md)] hover:bg-[var(--color-border-subtle)] transition-colors"
-              >
-                <item.icon weight="regular" className="w-4 h-4" />
-                <span>{item.label}</span>
-              </Link>
-            ))}
-          </nav>
+          <AdminNav />
         </aside>
 
         {/* Content */}
