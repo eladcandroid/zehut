@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from '@/components/layout/header';
 import { Sidebar, type PopularTag } from '@/components/layout/sidebar';
 import { SearchBar } from '@/components/filters/search-bar';
+import { TagBadges } from '@/components/filters/tag-badges';
 import { ContentGrid, type ContentCardData } from '@/components/content';
 import { useVisitor } from '@/lib/hooks/use-visitor';
 import { Spinner } from '@phosphor-icons/react';
@@ -194,6 +195,12 @@ export default function HomePage() {
                 className="w-full sm:w-64"
               />
             </div>
+            {/* Tag Badges */}
+            <TagBadges
+              tags={popularTags}
+              selectedTags={selectedTags}
+              onTagsChange={setSelectedTags}
+            />
           </div>
 
           {/* Content Grid */}
