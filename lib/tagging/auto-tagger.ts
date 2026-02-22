@@ -66,6 +66,23 @@ const categoryPatterns: Record<string, string[]> = {
 };
 
 /**
+ * Known show/series names to detect in titles.
+ * These are matched against the title only (not description)
+ * to avoid false positives from boilerplate text.
+ */
+const knownShows: string[] = [
+  'חמש על חמש',
+];
+
+/**
+ * Detect known show/series names in title
+ */
+function detectShows(title: string): string[] {
+  const lowerTitle = title.toLowerCase();
+  return knownShows.filter((show) => lowerTitle.includes(show.toLowerCase()));
+}
+
+/**
  * Maximum number of tags to generate per content item
  */
 const MAX_TAGS = 10;
@@ -222,17 +239,20 @@ export function generateTags(
   // Extract hashtags only from title — descriptions often contain
   // boilerplate/channel-wide hashtags unrelated to the specific content
   const hashtags = extractHashtags(title);
+  const shows = detectShows(title);
   const categories = detectCategories(fullText);
   const keywords = extractKeywords(fullText);
   const namedEntities = extractNamedEntities(fullText);
 
   // Combine all tags, prioritizing:
   // 1. Hashtags (user-provided, most relevant)
-  // 2. Categories (detected topics)
-  // 3. Named entities (people, places, organizations)
-  // 4. Keywords (frequent significant words)
+  // 2. Shows (known series/show names from title)
+  // 3. Categories (detected topics)
+  // 4. Named entities (people, places, organizations)
+  // 5. Keywords (frequent significant words)
   const allTags = [
     ...hashtags,
+    ...shows,
     ...categories,
     ...namedEntities,
     ...keywords,
