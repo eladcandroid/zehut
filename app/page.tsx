@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { Suspense, useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/header';
 import { Sidebar, type PopularTag } from '@/components/layout/sidebar';
 import { SearchBar } from '@/components/filters/search-bar';
 import { TagBadges } from '@/components/filters/tag-badges';
 import { ContentGrid, type ContentCardData } from '@/components/content';
 import { useVisitor } from '@/lib/hooks/use-visitor';
-import { Spinner } from '@phosphor-icons/react';
+import { CircleNotch } from '@phosphor-icons/react';
 import type { Platform, ContentType } from '@/lib/db/models/content';
 
 interface ContentResponse {
@@ -22,12 +23,33 @@ interface ContentResponse {
 }
 
 export default function HomePage() {
+  return (
+    <Suspense>
+      <HomePageContent />
+    </Suspense>
+  );
+}
+
+function HomePageContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>('all');
-  const [selectedSort, setSelectedSort] = useState('newest');
-  const [selectedContentType, setSelectedContentType] = useState<ContentType | 'all'>('all');
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [search, setSearch] = useState('');
+  const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>(
+    () => (searchParams.get('platform') as Platform) || 'all'
+  );
+  const [selectedSort, setSelectedSort] = useState(
+    () => searchParams.get('sort') || 'newest'
+  );
+  const [selectedContentType, setSelectedContentType] = useState<ContentType | 'all'>(
+    () => (searchParams.get('type') as ContentType) || 'all'
+  );
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    () => searchParams.get('tags')?.split(',').filter(Boolean) || []
+  );
+  const [search, setSearch] = useState(
+    () => searchParams.get('search') || ''
+  );
   const [content, setContent] = useState<ContentCardData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -36,6 +58,20 @@ export default function HomePage() {
 
   // Initialize visitor tracking
   useVisitor();
+
+  // Sync filters to URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (selectedTags.length > 0) params.set('tags', selectedTags.join(','));
+    if (selectedPlatform !== 'all') params.set('platform', selectedPlatform);
+    if (selectedSort !== 'newest') params.set('sort', selectedSort);
+    if (selectedContentType !== 'all') params.set('type', selectedContentType);
+    if (search) params.set('search', search);
+
+    const queryString = params.toString();
+    const newUrl = queryString ? `?${queryString}` : '/';
+    router.replace(newUrl, { scroll: false });
+  }, [selectedTags, selectedPlatform, selectedSort, selectedContentType, search, router]);
 
   // Fetch popular tags on mount
   useEffect(() => {
@@ -179,7 +215,7 @@ export default function HomePage() {
         <main className="flex-1 p-6 lg:p-8">
           {/* Search and Stats */}
           <div className="mb-6">
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
               <div>
                 <h1 className="text-2xl font-semibold text-[var(--color-foreground)]">
                   תוכן לשיתוף
@@ -188,19 +224,20 @@ export default function HomePage() {
                   גלו ושתפו את התכנים של זהות ומשה פייגלין
                 </p>
               </div>
-              <SearchBar
-                value={search}
-                onChange={setSearch}
-                placeholder="חפש תוכן..."
-                className="w-full sm:w-64"
-              />
+              <div className="w-full sm:w-auto flex flex-col gap-2">
+                <SearchBar
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="חפש תוכן..."
+                  className="w-full sm:w-64"
+                />
+                <TagBadges
+                  tags={popularTags}
+                  selectedTags={selectedTags}
+                  onTagsChange={setSelectedTags}
+                />
+              </div>
             </div>
-            {/* Tag Badges */}
-            <TagBadges
-              tags={popularTags}
-              selectedTags={selectedTags}
-              onTagsChange={setSelectedTags}
-            />
           </div>
 
           {/* Content Grid */}
@@ -210,7 +247,7 @@ export default function HomePage() {
           {hasMore && content.length > 0 && (
             <div ref={loaderRef} className="mt-8 flex justify-center py-4">
               {isLoading && (
-                <Spinner className="w-6 h-6 text-[var(--color-primary)] animate-spin" />
+                <CircleNotch className="w-6 h-6 text-[var(--color-primary)] animate-spin" />
               )}
             </div>
           )}

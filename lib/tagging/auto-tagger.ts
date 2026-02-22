@@ -219,8 +219,9 @@ export function generateTags(
 ): string[] {
   const fullText = `${title} ${description}`;
 
-  // Extract different types of tags
-  const hashtags = extractHashtags(fullText);
+  // Extract hashtags only from title — descriptions often contain
+  // boilerplate/channel-wide hashtags unrelated to the specific content
+  const hashtags = extractHashtags(title);
   const categories = detectCategories(fullText);
   const keywords = extractKeywords(fullText);
   const namedEntities = extractNamedEntities(fullText);
@@ -270,7 +271,7 @@ export function analyzeContent(
 
   return {
     tags: generateTags(title, description),
-    hashtags: extractHashtags(fullText),
+    hashtags: extractHashtags(title),
     categories: detectCategories(fullText),
     keywords: extractKeywords(fullText),
   };
