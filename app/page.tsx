@@ -78,6 +78,7 @@ function HomePageContent() {
     const fetchTags = async () => {
       try {
         const response = await fetch('/api/tags?limit=15');
+        if (!response.ok) return;
         const data = await response.json();
         setPopularTags(data.tags || []);
       } catch (error) {
@@ -115,21 +116,24 @@ function HomePageContent() {
       }
 
       const response = await fetch(`/api/content?${params}`);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
       const data: ContentResponse = await response.json();
 
       if (reset) {
-        setContent(data.content);
+        setContent(data.content ?? []);
         setPage(1);
       } else {
         // Deduplicate by _id when appending
         setContent((prev) => {
           const existingIds = new Set(prev.map(item => item._id));
-          const newItems = data.content.filter(item => !existingIds.has(item._id));
+          const newItems = (data.content ?? []).filter(item => !existingIds.has(item._id));
           return [...prev, ...newItems];
         });
       }
 
-      setHasMore(data.pagination.hasMore);
+      setHasMore(data.pagination?.hasMore ?? false);
     } catch (error) {
       console.error('Error fetching content:', error);
     } finally {

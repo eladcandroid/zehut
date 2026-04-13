@@ -7,6 +7,7 @@ import { Eye, Heart, Play } from '@phosphor-icons/react';
 import { Card } from '@/components/ui/card';
 import { PlatformBadge } from './platform-badge';
 import { ShareMenu } from './share-menu';
+import { DownloadButton } from './download-button';
 import { TagList } from './tag-badge';
 import { formatRelativeTime, formatNumber } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
@@ -143,14 +144,15 @@ export function ContentCard({ content, className }: ContentCardProps) {
           <TagList tags={content.tags} maxDisplay={3} className="mb-3" />
         )}
 
-        {/* Share */}
-        <div className="mt-auto pt-2">
+        {/* Share & Download */}
+        <div className="mt-auto pt-2 flex items-center gap-2">
           <ShareMenu
             contentId={content._id}
             title={content.title}
             contentUrl={content.contentUrl}
             shareCount={content.shareCount}
           />
+          {isVideo && <DownloadButton contentUrl={content.contentUrl} />}
         </div>
       </div>
     </Card>

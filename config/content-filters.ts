@@ -14,8 +14,9 @@ export const contentFilters = {
    * Videos from these channels are always accepted
    */
   whitelistedChannels: [
-    // Add trusted Zehut/Feiglin official channels here
-    // Example: 'UC_channel_id_here'
+    'UCOZL13F5YxiMtzUTer8zPYA', // YouTube: משה פייגלין - @moshe_feiglin
+    'MFeiglin',                  // Facebook: משה פייגלין
+    'ZehutParty',                // Facebook: מפלגת זהות
   ] as string[],
 
   /**
