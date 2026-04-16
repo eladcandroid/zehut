@@ -40,6 +40,26 @@ export class XScraper extends BaseScraper {
   }
 
   /**
+   * Convert Nitter-proxied image URL to original Twitter CDN URL.
+   * Nitter encodes paths like: /pic/pbs.twimg.com%2Fprofile_images%2F...
+   * This decodes them to: https://pbs.twimg.com/profile_images/...
+   */
+  private toTwitterImageUrl(nitterUrl: string, instance: string): string {
+    if (!nitterUrl) return '';
+    // Already a direct URL
+    if (nitterUrl.startsWith('https://pbs.twimg.com')) return nitterUrl;
+    // Strip the instance prefix and /pic/ path
+    const picPath = nitterUrl.replace(`${instance}/pic/`, '').replace(/^\/pic\//, '');
+    if (!picPath) return '';
+    const decoded = decodeURIComponent(picPath).split('?')[0];
+    // Some paths include the full domain, some don't
+    if (decoded.startsWith('pbs.twimg.com') || decoded.startsWith('video.twimg.com')) {
+      return `https://${decoded}`;
+    }
+    return `https://pbs.twimg.com/${decoded}`;
+  }
+
+  /**
    * Solve Anubis proof-of-work challenge.
    * Finds a nonce where SHA-256(randomData + nonce) has `difficulty` leading zero nibbles.
    */
@@ -170,7 +190,7 @@ export class XScraper extends BaseScraper {
         name,
         url: `https://x.com/${username}`,
         subscriberCount: followers,
-        avatarUrl: avatar.startsWith('http') ? avatar : `${instance}${avatar}`,
+        avatarUrl: this.toTwitterImageUrl(avatar, instance),
       };
     } catch (error) {
       console.error('[X] Failed to get user info:', error);
@@ -240,10 +260,8 @@ export class XScraper extends BaseScraper {
             thumbnailUrl = $el.find('.still-image img').attr('src') || '';
           }
 
-          // Fix thumbnail URL
-          if (thumbnailUrl && !thumbnailUrl.startsWith('http')) {
-            thumbnailUrl = `${instance}${thumbnailUrl}`;
-          }
+          // Convert Nitter-proxied URLs to original Twitter CDN URLs
+          thumbnailUrl = this.toTwitterImageUrl(thumbnailUrl || '', instance);
 
           items.push({
             platformId: tweetId,
@@ -258,7 +276,7 @@ export class XScraper extends BaseScraper {
               id: username,
               name: authorName,
               handle: username,
-              avatarUrl: authorAvatar.startsWith('http') ? authorAvatar : `${instance}${authorAvatar}`,
+              avatarUrl: this.toTwitterImageUrl(authorAvatar, instance),
               profileUrl: `https://x.com/${username}`,
             },
             platformMetrics: {
@@ -324,9 +342,7 @@ export class XScraper extends BaseScraper {
             thumbnailUrl = $el.find('.still-image img').attr('src') || '';
           }
 
-          if (thumbnailUrl && !thumbnailUrl.startsWith('http')) {
-            thumbnailUrl = `${instance}${thumbnailUrl}`;
-          }
+          thumbnailUrl = this.toTwitterImageUrl(thumbnailUrl || '', instance);
 
           // Get stats
           const stats = $el.find('.tweet-stat');
@@ -355,7 +371,7 @@ export class XScraper extends BaseScraper {
               id: username,
               name: authorName,
               handle: username,
-              avatarUrl: authorAvatar.startsWith('http') ? authorAvatar : `${instance}${authorAvatar}`,
+              avatarUrl: this.toTwitterImageUrl(authorAvatar, instance),
               profileUrl: `https://x.com/${username}`,
             },
             platformMetrics: {
