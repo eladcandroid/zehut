@@ -19,6 +19,7 @@ export const contentFilters = {
     'ZehutParty',                // Facebook: מפלגת זהות
     'moshefeiglin',              // X + Instagram: משה פייגלין
     'zehut.il',                  // Instagram: מפלגת זהות
+    'm_feiglin',                 // Telegram: משה פייגלין
   ] as string[],
 
   /**
