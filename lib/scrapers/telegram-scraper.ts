@@ -61,18 +61,105 @@ export class TelegramScraper extends BaseScraper {
     }
   }
 
+  /**
+   * Parse messages from a page of Telegram HTML.
+   * Returns items + the earliest message ID (for pagination).
+   */
+  private parseMessagesFromHtml(
+    html: string,
+    channelUsername: string,
+    channelName: string,
+    channelAvatar: string
+  ): { items: RawContentItem[]; earliestMsgId: number | null } {
+    const $ = cheerio.load(html);
+    const items: RawContentItem[] = [];
+    let earliestMsgId: number | null = null;
+
+    $('.tgme_widget_message_wrap').each((_, el) => {
+      const $msg = $(el);
+      const msgEl = $msg.find('.tgme_widget_message');
+      const msgId = msgEl.attr('data-post')?.split('/')[1] || '';
+
+      if (!msgId) return;
+
+      const numericId = parseInt(msgId, 10);
+      if (!isNaN(numericId) && (earliestMsgId === null || numericId < earliestMsgId)) {
+        earliestMsgId = numericId;
+      }
+
+      // Text content
+      const text = $msg.find('.tgme_widget_message_text').text().trim();
+
+      // Skip service messages
+      if ($msg.find('.service_message, .message_service').length > 0) return;
+      if (!text && !$msg.find('.tgme_widget_message_photo_wrap, .tgme_widget_message_video_wrap, .tgme_widget_message_document_wrap').length) return;
+
+      const dateStr = $msg.find('.tgme_widget_message_date time').attr('datetime') || '';
+      const publishedAt = dateStr ? new Date(dateStr) : new Date();
+      const views = this.parseCount($msg.find('.tgme_widget_message_views').text().trim());
+
+      const hasPhoto = $msg.find('.tgme_widget_message_photo_wrap').length > 0;
+      const hasVideo = $msg.find('.tgme_widget_message_video_wrap, .tgme_widget_message_roundvideo').length > 0;
+      let type: ContentType = 'text';
+      let thumbnailUrl = '';
+
+      if (hasVideo) {
+        type = 'video';
+        const style = $msg.find('.tgme_widget_message_video_thumb').attr('style') || '';
+        const bgMatch = style.match(/background-image:url\('([^']+)'\)/);
+        if (bgMatch) thumbnailUrl = bgMatch[1];
+      } else if (hasPhoto) {
+        type = 'image';
+        const style = $msg.find('.tgme_widget_message_photo_wrap').attr('style') || '';
+        const bgMatch = style.match(/background-image:url\('([^']+)'\)/);
+        if (bgMatch) thumbnailUrl = bgMatch[1];
+      }
+
+      if (!thumbnailUrl) {
+        const style = $msg.find('.link_preview_image').attr('style') || '';
+        const bgMatch = style.match(/background-image:url\('([^']+)'\)/);
+        if (bgMatch) thumbnailUrl = bgMatch[1];
+      }
+
+      items.push({
+        platformId: `${channelUsername}_${msgId}`,
+        platform: 'telegram',
+        type,
+        title: text.slice(0, 100) + (text.length > 100 ? '...' : ''),
+        description: text,
+        thumbnailUrl,
+        contentUrl: `https://t.me/${channelUsername}/${msgId}`,
+        mediaUrls: [],
+        author: {
+          id: channelUsername,
+          name: channelName,
+          handle: channelUsername,
+          avatarUrl: channelAvatar,
+          profileUrl: `https://t.me/${channelUsername}`,
+        },
+        platformMetrics: { views, lastUpdated: new Date() },
+        publishedAt,
+        tags: this.extractTags(text),
+        language: this.detectLanguage(text),
+      });
+    });
+
+    return { items, earliestMsgId };
+  }
+
   async fetchContent(
     channelUsername: string,
     options: FetchOptions = {}
   ): Promise<RawContentItem[]> {
     const { maxItems = 20 } = options;
+    const MAX_PAGES = 5;
     const items: RawContentItem[] = [];
 
     try {
-      const html = await this.fetchChannelPage(channelUsername);
-      const $ = cheerio.load(html);
+      // Fetch first page
+      const firstHtml = await this.fetchChannelPage(channelUsername);
+      const $ = cheerio.load(firstHtml);
 
-      // Channel info for author
       const channelName = $('.tgme_channel_info_header_title span').text().trim()
         || $('meta[property="og:title"]').attr('content')
         || channelUsername;
@@ -80,92 +167,32 @@ export class TelegramScraper extends BaseScraper {
         || $('.tgme_channel_info_header_photo img').attr('src')
         || '';
 
-      // Parse messages
-      $('.tgme_widget_message_wrap').each((_, el) => {
-        if (items.length >= maxItems) return;
+      const firstPage = this.parseMessagesFromHtml(firstHtml, channelUsername, channelName, channelAvatar);
+      items.push(...firstPage.items);
+      console.log(`[Telegram] Page 1: ${firstPage.items.length} messages (total: ${items.length})`);
 
-        const $msg = $(el);
-        const msgEl = $msg.find('.tgme_widget_message');
-        const msgId = msgEl.attr('data-post')?.split('/')[1] || '';
-
-        if (!msgId) return;
-
-        // Text content
-        const textEl = $msg.find('.tgme_widget_message_text');
-        const text = textEl.text().trim();
-
-        // Skip service messages (channel created, photo updated, etc.)
-        if ($msg.find('.service_message, .message_service').length > 0) return;
-        if (!text && !$msg.find('.tgme_widget_message_photo_wrap, .tgme_widget_message_video_wrap, .tgme_widget_message_document_wrap').length) return;
-
-        // Date
-        const dateStr = $msg.find('.tgme_widget_message_date time').attr('datetime') || '';
-        const publishedAt = dateStr ? new Date(dateStr) : new Date();
-
-        // Views
-        const viewsText = $msg.find('.tgme_widget_message_views').text().trim();
-        const views = this.parseCount(viewsText);
-
-        // Media detection
-        const hasPhoto = $msg.find('.tgme_widget_message_photo_wrap').length > 0;
-        const hasVideo = $msg.find('.tgme_widget_message_video_wrap, .tgme_widget_message_roundvideo').length > 0;
-
-        let type: ContentType = 'text';
-        let thumbnailUrl = '';
-
-        if (hasVideo) {
-          type = 'video';
-          // Video poster/thumbnail from background-image style
-          const videoWrap = $msg.find('.tgme_widget_message_video_thumb');
-          const style = videoWrap.attr('style') || '';
-          const bgMatch = style.match(/background-image:url\('([^']+)'\)/);
-          if (bgMatch) thumbnailUrl = bgMatch[1];
-        } else if (hasPhoto) {
-          type = 'image';
-          const photoWrap = $msg.find('.tgme_widget_message_photo_wrap');
-          const style = photoWrap.attr('style') || '';
-          const bgMatch = style.match(/background-image:url\('([^']+)'\)/);
-          if (bgMatch) thumbnailUrl = bgMatch[1];
-        }
-
-        // Link preview image as fallback
-        if (!thumbnailUrl) {
-          const linkPreview = $msg.find('.link_preview_image');
-          const style = linkPreview.attr('style') || '';
-          const bgMatch = style.match(/background-image:url\('([^']+)'\)/);
-          if (bgMatch) thumbnailUrl = bgMatch[1];
-        }
-
-        items.push({
-          platformId: `${channelUsername}_${msgId}`,
-          platform: 'telegram',
-          type,
-          title: text.slice(0, 100) + (text.length > 100 ? '...' : ''),
-          description: text,
-          thumbnailUrl,
-          contentUrl: `https://t.me/${channelUsername}/${msgId}`,
-          mediaUrls: [],
-          author: {
-            id: channelUsername,
-            name: channelName,
-            handle: channelUsername,
-            avatarUrl: channelAvatar,
-            profileUrl: `https://t.me/${channelUsername}`,
-          },
-          platformMetrics: {
-            views,
-            lastUpdated: new Date(),
-          },
-          publishedAt,
-          tags: this.extractTags(text),
-          language: this.detectLanguage(text),
+      // Paginate backwards using ?before=earliestMsgId
+      let earliestId = firstPage.earliestMsgId;
+      for (let page = 2; page <= MAX_PAGES && items.length < maxItems && earliestId; page++) {
+        console.log(`[Telegram] Fetching page ${page} (before=${earliestId})`);
+        const res = await fetch(`https://t.me/s/${channelUsername}?before=${earliestId}`, {
+          headers: { 'User-Agent': USER_AGENT },
         });
-      });
+        if (!res.ok) break;
+
+        const html = await res.text();
+        const pageResult = this.parseMessagesFromHtml(html, channelUsername, channelName, channelAvatar);
+        if (pageResult.items.length === 0) break;
+
+        items.push(...pageResult.items);
+        console.log(`[Telegram] Page ${page}: ${pageResult.items.length} messages (total: ${items.length})`);
+        earliestId = pageResult.earliestMsgId;
+      }
     } catch (error) {
       console.error('[Telegram] Error fetching content:', error);
     }
 
-    return items;
+    return items.slice(0, maxItems);
   }
 
   async searchContent(

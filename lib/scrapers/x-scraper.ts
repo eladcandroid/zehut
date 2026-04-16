@@ -198,103 +198,146 @@ export class XScraper extends BaseScraper {
     }
   }
 
+  /**
+   * Parse tweets from a page of Nitter HTML into RawContentItem[].
+   */
+  private parseTweetsFromHtml(
+    html: string,
+    instance: string,
+    username: string,
+    authorName: string,
+    authorAvatar: string
+  ): RawContentItem[] {
+    const $ = cheerio.load(html);
+    const items: RawContentItem[] = [];
+
+    $('.timeline-item').each((_, element) => {
+      const $el = $(element);
+
+      // Skip retweets
+      if ($el.find('.retweet-header').length > 0) return;
+
+      const tweetLink = $el.find('.tweet-link').attr('href') || '';
+      const tweetId = tweetLink.split('/status/')[1]?.split('#')[0] || '';
+
+      if (!tweetId) return;
+
+      const text = $el.find('.tweet-content').text().trim();
+      const dateStr = $el.find('.tweet-date a').attr('title') || '';
+      const publishedAt = this.parseNitterDate(dateStr);
+
+      // Get stats
+      const stats = $el.find('.tweet-stat');
+      let comments = 0, retweets = 0, likes = 0;
+
+      stats.each((_, stat) => {
+        const $stat = $(stat);
+        const icon = $stat.find('.icon-container > span').attr('class') || '';
+        const count = this.parseCount($stat.text().trim());
+
+        if (icon.includes('comment')) comments = count;
+        else if (icon.includes('retweet')) retweets = count;
+        else if (icon.includes('heart')) likes = count;
+      });
+
+      // Check for media
+      const hasImage = $el.find('.still-image').length > 0;
+      const hasVideo = $el.find('.gif-video, .gallery-video').length > 0;
+      let type: ContentType = 'text';
+      let thumbnailUrl = '';
+
+      if (hasVideo) {
+        type = 'video';
+        thumbnailUrl = $el.find('.gif-video video, .gallery-video video').attr('poster') || '';
+      } else if (hasImage) {
+        type = 'image';
+        thumbnailUrl = $el.find('.still-image img').attr('src') || '';
+      }
+
+      // Convert Nitter-proxied URLs to original Twitter CDN URLs
+      thumbnailUrl = this.toTwitterImageUrl(thumbnailUrl || '', instance);
+
+      items.push({
+        platformId: tweetId,
+        platform: 'x',
+        type,
+        title: text.slice(0, 100) + (text.length > 100 ? '...' : ''),
+        description: text,
+        thumbnailUrl,
+        contentUrl: `https://x.com/${username}/status/${tweetId}`,
+        mediaUrls: [],
+        author: {
+          id: username,
+          name: authorName,
+          handle: username,
+          avatarUrl: this.toTwitterImageUrl(authorAvatar, instance),
+          profileUrl: `https://x.com/${username}`,
+        },
+        platformMetrics: {
+          likes,
+          shares: retweets,
+          comments,
+          lastUpdated: new Date(),
+        },
+        publishedAt,
+        tags: this.extractTags(text),
+        language: this.detectLanguage(text),
+      });
+    });
+
+    return items;
+  }
+
   async fetchContent(
     username: string,
     options: FetchOptions = {}
   ): Promise<RawContentItem[]> {
     const { maxItems = 30 } = options;
     const items: RawContentItem[] = [];
+    const MAX_PAGES = 5;
 
     try {
       const instance = this.getNitterInstance();
-      const html = await this.fetchNitterPage(`${instance}/${username}`, instance);
-      const $ = cheerio.load(html);
+      const firstPageHtml = await this.fetchNitterPage(`${instance}/${username}`, instance);
+      const $ = cheerio.load(firstPageHtml);
 
-      // Get user info
+      // Get user info from the first page
       const authorName = $('.profile-card-fullname').text().trim() || username;
       const authorAvatar = $('.profile-card-avatar img').attr('src') || '';
 
-      // Parse tweets
-      $('.timeline-item')
-        .slice(0, maxItems)
-        .each((_, element) => {
-          const $el = $(element);
+      // Parse first page
+      const firstPageItems = this.parseTweetsFromHtml(firstPageHtml, instance, username, authorName, authorAvatar);
+      items.push(...firstPageItems);
+      console.log(`[X] Page 1: parsed ${firstPageItems.length} tweets (total: ${items.length})`);
 
-          // Skip retweets
-          if ($el.find('.retweet-header').length > 0) return;
+      // Paginate through subsequent pages
+      let currentHtml = firstPageHtml;
+      for (let page = 2; page <= MAX_PAGES && items.length < maxItems; page++) {
+        const cursorMatch = currentHtml.match(/cursor=([^"&]+)/);
+        if (!cursorMatch) {
+          console.log(`[X] No cursor found, stopping pagination after ${page - 1} pages`);
+          break;
+        }
 
-          const tweetLink = $el.find('.tweet-link').attr('href') || '';
-          const tweetId = tweetLink.split('/status/')[1]?.split('#')[0] || '';
+        const cursor = cursorMatch[1];
+        console.log(`[X] Fetching page ${page} with cursor=${cursor.slice(0, 20)}...`);
+        currentHtml = await this.fetchNitterPage(`${instance}/${username}?cursor=${cursor}`, instance);
 
-          if (!tweetId) return;
+        const pageItems = this.parseTweetsFromHtml(currentHtml, instance, username, authorName, authorAvatar);
+        if (pageItems.length === 0) {
+          console.log(`[X] No tweets on page ${page}, stopping pagination`);
+          break;
+        }
 
-          const text = $el.find('.tweet-content').text().trim();
-          const dateStr = $el.find('.tweet-date a').attr('title') || '';
-          const publishedAt = this.parseNitterDate(dateStr);
-
-          // Get stats
-          const stats = $el.find('.tweet-stat');
-          let comments = 0, retweets = 0, likes = 0;
-
-          stats.each((_, stat) => {
-            const $stat = $(stat);
-            const icon = $stat.find('.icon-container > span').attr('class') || '';
-            const count = this.parseCount($stat.text().trim());
-
-            if (icon.includes('comment')) comments = count;
-            else if (icon.includes('retweet')) retweets = count;
-            else if (icon.includes('heart')) likes = count;
-          });
-
-          // Check for media
-          const hasImage = $el.find('.still-image').length > 0;
-          const hasVideo = $el.find('.gif-video, .gallery-video').length > 0;
-          let type: ContentType = 'text';
-          let thumbnailUrl = '';
-
-          if (hasVideo) {
-            type = 'video';
-            thumbnailUrl = $el.find('.gif-video video, .gallery-video video').attr('poster') || '';
-          } else if (hasImage) {
-            type = 'image';
-            thumbnailUrl = $el.find('.still-image img').attr('src') || '';
-          }
-
-          // Convert Nitter-proxied URLs to original Twitter CDN URLs
-          thumbnailUrl = this.toTwitterImageUrl(thumbnailUrl || '', instance);
-
-          items.push({
-            platformId: tweetId,
-            platform: 'x',
-            type,
-            title: text.slice(0, 100) + (text.length > 100 ? '...' : ''),
-            description: text,
-            thumbnailUrl,
-            contentUrl: `https://x.com/${username}/status/${tweetId}`,
-            mediaUrls: [],
-            author: {
-              id: username,
-              name: authorName,
-              handle: username,
-              avatarUrl: this.toTwitterImageUrl(authorAvatar, instance),
-              profileUrl: `https://x.com/${username}`,
-            },
-            platformMetrics: {
-              likes,
-              shares: retweets,
-              comments,
-              lastUpdated: new Date(),
-            },
-            publishedAt,
-            tags: this.extractTags(text),
-            language: this.detectLanguage(text),
-          });
-        });
+        items.push(...pageItems);
+        console.log(`[X] Page ${page}: parsed ${pageItems.length} tweets (total: ${items.length})`);
+      }
     } catch (error) {
       console.error('[X] Error fetching content:', error);
     }
 
-    return items;
+    // Trim to maxItems in case the last page pushed us over
+    return items.slice(0, maxItems);
   }
 
   async searchContent(
