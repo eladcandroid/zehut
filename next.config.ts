@@ -19,6 +19,7 @@ const nextConfig: NextConfig = {
       // Spotify
       { protocol: 'https', hostname: '*.scdn.co' },
       { protocol: 'https', hostname: '*.spotifycdn.com' },
+      { protocol: 'https', hostname: 'd3t3ozftmdmh3i.cloudfront.net' },
       // X/Twitter
       { protocol: 'https', hostname: 'pbs.twimg.com' },
       { protocol: 'https', hostname: 'abs.twimg.com' },
