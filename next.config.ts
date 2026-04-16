@@ -19,6 +19,7 @@ const nextConfig: NextConfig = {
       // Telegram
       { protocol: 'https', hostname: 'telegram.org' },
       { protocol: 'https', hostname: '*.telegram.org' },
+      { protocol: 'https', hostname: '*.telesco.pe' },
       // X/Twitter
       { protocol: 'https', hostname: 'pbs.twimg.com' },
       { protocol: 'https', hostname: 'abs.twimg.com' },
