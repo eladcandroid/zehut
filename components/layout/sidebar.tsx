@@ -7,6 +7,7 @@ import {
   TelegramLogo,
   XLogo,
   FacebookLogo,
+  SpotifyLogo,
   VideoCamera,
   Image,
   Article,
@@ -54,6 +55,11 @@ const platformFilters: FilterOption[] = [
     value: 'instagram',
     label: 'אינסטגרם',
     icon: <InstagramLogo weight="fill" className="w-4 h-4 text-pink-500" />,
+  },
+  {
+    value: 'spotify',
+    label: 'ספוטיפיי',
+    icon: <SpotifyLogo weight="fill" className="w-4 h-4 text-green-500" />,
   },
 ];
 

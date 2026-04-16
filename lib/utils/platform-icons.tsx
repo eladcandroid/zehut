@@ -4,11 +4,12 @@ import {
   TelegramLogo,
   XLogo,
   FacebookLogo,
+  SpotifyLogo,
 } from '@phosphor-icons/react';
 import type { Platform } from '@/lib/db/models/content';
 
 // Single source of truth for all platforms
-export const PLATFORMS: Platform[] = ['youtube', 'facebook', 'telegram', 'x', 'instagram'];
+export const PLATFORMS: Platform[] = ['youtube', 'facebook', 'telegram', 'x', 'instagram', 'spotify'];
 
 export const platformConfig: Record<Platform, { icon: typeof YoutubeLogo; name: string; hebrewName: string; color: string }> = {
   youtube: { icon: YoutubeLogo, name: 'YouTube', hebrewName: 'יוטיוב', color: 'var(--color-youtube)' },
@@ -16,6 +17,7 @@ export const platformConfig: Record<Platform, { icon: typeof YoutubeLogo; name: 
   telegram: { icon: TelegramLogo, name: 'Telegram', hebrewName: 'טלגרם', color: 'var(--color-telegram)' },
   x: { icon: XLogo, name: 'X', hebrewName: 'X', color: 'var(--color-x)' },
   instagram: { icon: InstagramLogo, name: 'Instagram', hebrewName: 'אינסטגרם', color: 'var(--color-instagram)' },
+  spotify: { icon: SpotifyLogo, name: 'Spotify', hebrewName: 'ספוטיפיי', color: 'var(--color-spotify)' },
 };
 
 export function getPlatformIcon(platform: Platform) {

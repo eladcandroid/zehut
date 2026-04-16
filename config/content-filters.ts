@@ -20,6 +20,7 @@ export const contentFilters = {
     'moshefeiglin',              // X + Instagram: משה פייגלין
     'zehut.il',                  // Instagram: מפלגת זהות
     'm_feiglin',                 // Telegram: משה פייגלין
+    '0hVvJcOmIyguaOEKUDzsNP',   // Spotify: משה פייגלין podcast
   ] as string[],
 
   /**
