@@ -17,6 +17,7 @@ export const contentFilters = {
     'UCOZL13F5YxiMtzUTer8zPYA', // YouTube: משה פייגלין - @moshe_feiglin
     'MFeiglin',                  // Facebook: משה פייגלין
     'ZehutParty',                // Facebook: מפלגת זהות
+    'moshefeiglin',              // X: משה פייגלין - @moshefeiglin
   ] as string[],
 
   /**
