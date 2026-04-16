@@ -1,5 +1,3 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
-import * as cheerio from 'cheerio';
 import {
   BaseScraper,
   type FetchOptions,
@@ -8,93 +6,96 @@ import {
 } from './base-scraper';
 import type { Platform, ContentType } from '@/lib/db/models/content';
 
-// Instagram Graph API requires:
-// 1. Facebook App
-// 2. Instagram Business/Creator account linked to Facebook Page
-// 3. User access token with instagram_basic permission
-//
-// This scraper uses Puppeteer for public profile scraping as a fallback
-// Note: Instagram has aggressive anti-bot measures
+// Instagram scraping via the unofficial i.instagram.com API
+// No API key or browser required — works on Vercel serverless
+// Returns up to 12 latest posts per request with full metadata
+
+const IG_API_BASE = 'https://i.instagram.com/api/v1';
+const IG_APP_ID = '936619743392459';
+const IG_USER_AGENT =
+  'Instagram 76.0.0.15.395 Android (24/7.0; 640dpi; 1440x2560; samsung; SM-G930F; herolte; samsungexynos8890; en_US; 138226743)';
+
+interface IGUser {
+  username: string;
+  full_name: string;
+  profile_pic_url: string;
+  profile_pic_url_hd?: string;
+  edge_followed_by: { count: number };
+  edge_owner_to_timeline_media: {
+    count: number;
+    edges: IGPostEdge[];
+  };
+}
+
+interface IGPostEdge {
+  node: {
+    id: string;
+    shortcode: string;
+    __typename: string;
+    display_url: string;
+    thumbnail_src?: string;
+    is_video: boolean;
+    video_url?: string;
+    taken_at_timestamp: number;
+    edge_liked_by?: { count: number };
+    edge_media_to_comment?: { count: number };
+    edge_media_to_caption?: { edges: Array<{ node: { text: string } }> };
+    edge_sidecar_to_children?: { edges: Array<{ node: { display_url: string; is_video: boolean } }> };
+  };
+}
 
 export class InstagramScraper extends BaseScraper {
   platform: Platform = 'instagram';
   name = 'Instagram Scraper';
 
-  private browser: Browser | null = null;
+  /**
+   * Fetch user profile + posts from Instagram's unofficial API.
+   */
+  private async fetchUserProfile(username: string): Promise<IGUser | null> {
+    try {
+      const res = await fetch(
+        `${IG_API_BASE}/users/web_profile_info/?username=${encodeURIComponent(username)}`,
+        {
+          headers: {
+            'User-Agent': IG_USER_AGENT,
+            'X-IG-App-ID': IG_APP_ID,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        console.error(`[Instagram] API returned ${res.status} for @${username}`);
+        return null;
+      }
+
+      const data = await res.json();
+      return data?.data?.user || null;
+    } catch (error) {
+      console.error('[Instagram] API request failed:', error);
+      return null;
+    }
+  }
 
   async validateCredentials(): Promise<boolean> {
     try {
-      const browser = await this.getBrowser();
-      const page = await browser.newPage();
-      await page.goto('https://www.instagram.com', { waitUntil: 'domcontentloaded' });
-      await page.close();
-      return true;
-    } catch (error) {
-      console.error('[Instagram] Puppeteer validation failed:', error);
+      const user = await this.fetchUserProfile('instagram');
+      return user !== null;
+    } catch {
       return false;
     }
   }
 
-  private async getBrowser(): Promise<Browser> {
-    if (!this.browser) {
-      this.browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-        ],
-      });
-    }
-    return this.browser;
-  }
-
   async getSourceInfo(username: string): Promise<SourceInfo | null> {
     try {
-      // Try oEmbed first (no authentication needed)
-      const response = await fetch(
-        `https://api.instagram.com/oembed/?url=https://www.instagram.com/${username}/`
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          id: username,
-          name: data.author_name || username,
-          url: `https://www.instagram.com/${username}/`,
-        };
-      }
-
-      // Fallback to Puppeteer
-      const browser = await this.getBrowser();
-      const page = await browser.newPage();
-
-      await page.setUserAgent(
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      );
-
-      await page.goto(`https://www.instagram.com/${username}/`, {
-        waitUntil: 'networkidle2',
-        timeout: 30000,
-      });
-
-      // Wait for profile to load
-      await page.waitForSelector('header', { timeout: 10000 }).catch(() => null);
-
-      const html = await page.content();
-      const $ = cheerio.load(html);
-
-      // Try to extract from meta tags
-      const title = $('meta[property="og:title"]').attr('content') || '';
-      const name = title.split('(')[0]?.trim() || username;
-
-      await page.close();
+      const user = await this.fetchUserProfile(username);
+      if (!user) return null;
 
       return {
         id: username,
-        name,
+        name: user.full_name || username,
         url: `https://www.instagram.com/${username}/`,
+        subscriberCount: user.edge_followed_by?.count,
+        avatarUrl: user.profile_pic_url_hd || user.profile_pic_url,
       };
     } catch (error) {
       console.error('[Instagram] Failed to get user info:', error);
@@ -110,80 +111,51 @@ export class InstagramScraper extends BaseScraper {
     const items: RawContentItem[] = [];
 
     try {
-      const browser = await this.getBrowser();
-      const page = await browser.newPage();
+      const user = await this.fetchUserProfile(username);
+      if (!user) return items;
 
-      await page.setUserAgent(
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      );
+      const authorName = user.full_name || username;
+      const avatarUrl = user.profile_pic_url_hd || user.profile_pic_url;
 
-      await page.goto(`https://www.instagram.com/${username}/`, {
-        waitUntil: 'networkidle2',
-        timeout: 30000,
-      });
+      const edges = user.edge_owner_to_timeline_media?.edges || [];
 
-      // Check for login wall
-      const loginWall = await page.$('input[name="username"]');
-      if (loginWall) {
-        console.warn('[Instagram] Login wall detected. Limited scraping available.');
-        await page.close();
-        return items;
-      }
+      for (const edge of edges.slice(0, maxItems)) {
+        const node = edge.node;
+        const caption = node.edge_media_to_caption?.edges?.[0]?.node?.text || '';
 
-      // Wait for posts to load
-      await page.waitForSelector('article a', { timeout: 10000 }).catch(() => null);
-
-      const html = await page.content();
-      const $ = cheerio.load(html);
-
-      // Get user info from meta tags
-      const title = $('meta[property="og:title"]').attr('content') || '';
-      const authorName = title.split('(')[0]?.trim() || username;
-      const description = $('meta[property="og:description"]').attr('content') || '';
-
-      // Extract posts
-      const postLinks: string[] = [];
-      $('article a[href*="/p/"], article a[href*="/reel/"]').each((_, el) => {
-        const href = $(el).attr('href');
-        if (href && postLinks.length < maxItems) {
-          postLinks.push(href);
+        let type: ContentType = 'image';
+        if (node.is_video) {
+          type = 'video';
+        } else if (node.__typename === 'GraphSidecar') {
+          type = 'image'; // carousel
         }
-      });
-
-      // Deduplicate
-      const uniqueLinks = [...new Set(postLinks)];
-
-      for (const link of uniqueLinks.slice(0, maxItems)) {
-        const shortcode = link.match(/\/(?:p|reel)\/([^/]+)/)?.[1];
-        if (!shortcode) continue;
-
-        const isReel = link.includes('/reel/');
 
         items.push({
-          platformId: shortcode,
+          platformId: node.shortcode,
           platform: 'instagram',
-          type: isReel ? 'reel' : 'image',
-          title: `${authorName} on Instagram`,
-          description: '',
-          thumbnailUrl: '',
-          contentUrl: `https://www.instagram.com${link}`,
+          type,
+          title: caption.slice(0, 100) + (caption.length > 100 ? '...' : ''),
+          description: caption,
+          thumbnailUrl: node.display_url,
+          contentUrl: `https://www.instagram.com/p/${node.shortcode}/`,
           mediaUrls: [],
           author: {
             id: username,
             name: authorName,
             handle: username,
+            avatarUrl,
             profileUrl: `https://www.instagram.com/${username}/`,
           },
           platformMetrics: {
+            likes: node.edge_liked_by?.count,
+            comments: node.edge_media_to_comment?.count,
             lastUpdated: new Date(),
           },
-          publishedAt: new Date(),
-          tags: [],
-          language: 'he',
+          publishedAt: new Date(node.taken_at_timestamp * 1000),
+          tags: this.extractTags(caption),
+          language: this.detectLanguage(caption),
         });
       }
-
-      await page.close();
     } catch (error) {
       console.error('[Instagram] Error fetching content:', error);
     }
@@ -193,93 +165,15 @@ export class InstagramScraper extends BaseScraper {
 
   async searchContent(
     query: string,
-    options: FetchOptions = {}
+    _options: FetchOptions = {}
   ): Promise<RawContentItem[]> {
-    const { maxItems = 12 } = options;
-    const items: RawContentItem[] = [];
-
-    try {
-      const browser = await this.getBrowser();
-      const page = await browser.newPage();
-
-      await page.setUserAgent(
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      );
-
-      // Instagram requires login for hashtag search
-      // Try without login first
-      const hashtag = query.replace('#', '');
-      await page.goto(`https://www.instagram.com/explore/tags/${encodeURIComponent(hashtag)}/`, {
-        waitUntil: 'networkidle2',
-        timeout: 30000,
-      });
-
-      // Check for login wall
-      const loginWall = await page.$('input[name="username"]');
-      if (loginWall) {
-        console.warn('[Instagram] Login required for hashtag search');
-        await page.close();
-        return items;
-      }
-
-      await page.waitForSelector('article a', { timeout: 10000 }).catch(() => null);
-
-      const html = await page.content();
-      const $ = cheerio.load(html);
-
-      const postLinks: string[] = [];
-      $('article a[href*="/p/"], article a[href*="/reel/"]').each((_, el) => {
-        const href = $(el).attr('href');
-        if (href && postLinks.length < maxItems) {
-          postLinks.push(href);
-        }
-      });
-
-      const uniqueLinks = [...new Set(postLinks)];
-
-      for (const link of uniqueLinks.slice(0, maxItems)) {
-        const shortcode = link.match(/\/(?:p|reel)\/([^/]+)/)?.[1];
-        if (!shortcode) continue;
-
-        const isReel = link.includes('/reel/');
-
-        items.push({
-          platformId: shortcode,
-          platform: 'instagram',
-          type: isReel ? 'reel' : 'image',
-          title: `#${hashtag} on Instagram`,
-          description: '',
-          thumbnailUrl: '',
-          contentUrl: `https://www.instagram.com${link}`,
-          mediaUrls: [],
-          author: {
-            id: 'unknown',
-            name: 'Instagram User',
-            handle: 'unknown',
-            profileUrl: '',
-          },
-          platformMetrics: {
-            lastUpdated: new Date(),
-          },
-          publishedAt: new Date(),
-          tags: [hashtag],
-          language: 'he',
-        });
-      }
-
-      await page.close();
-    } catch (error) {
-      console.error('[Instagram] Error searching content:', error);
-    }
-
-    return items;
+    // Instagram search requires authentication — not available via this API
+    console.warn('[Instagram] Search not supported without authentication');
+    return [];
   }
 
   async close(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-    }
+    // No browser to close
   }
 }
 

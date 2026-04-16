@@ -15,13 +15,11 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'scontent.cdninstagram.com' },
       { protocol: 'https', hostname: '*.cdninstagram.com' },
       { protocol: 'https', hostname: 'instagram.com' },
+      { protocol: 'https', hostname: '*.fna.fbcdn.net' },
       // Telegram
       { protocol: 'https', hostname: 'telegram.org' },
       { protocol: 'https', hostname: '*.telegram.org' },
-      // X/Twitter via Nitter
-      { protocol: 'https', hostname: 'nitter.poast.org' },
-      { protocol: 'https', hostname: 'nitter.privacydev.net' },
-      { protocol: 'https', hostname: 'nitter.woodland.cafe' },
+      // X/Twitter
       { protocol: 'https', hostname: 'pbs.twimg.com' },
       { protocol: 'https', hostname: 'abs.twimg.com' },
       // Facebook (multiple subdomain levels)
