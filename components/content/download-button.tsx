@@ -41,11 +41,14 @@ export function DownloadButton({ contentUrl, className, directDownload }: Downlo
     abortRef.current = new AbortController();
 
     try {
-      let downloadUrl: string;
+      let res: Response;
 
       if (directDownload) {
-        // Direct audio URL (e.g. Spotify RSS enclosure) — skip proxy
-        downloadUrl = contentUrl;
+        // Direct audio download — stream through our API to bypass CORS
+        res = await fetch(
+          `/api/download?url=${encodeURIComponent(contentUrl)}&direct=1`,
+          { signal: abortRef.current.signal },
+        );
       } else {
         // Step 1: Get the proxy download URL from our API
         const apiRes = await fetch(
@@ -53,11 +56,11 @@ export function DownloadButton({ contentUrl, className, directDownload }: Downlo
           { signal: abortRef.current.signal },
         );
         if (!apiRes.ok) throw new Error('API error');
-        ({ downloadUrl } = await apiRes.json());
-      }
+        const { downloadUrl } = await apiRes.json();
 
-      // Step 2: Fetch the file
-      const res = await fetch(downloadUrl, { signal: abortRef.current.signal });
+        // Step 2: Fetch from the proxy
+        res = await fetch(downloadUrl, { signal: abortRef.current.signal });
+      }
 
       if (!res.ok) {
         // Try to parse error JSON from proxy
