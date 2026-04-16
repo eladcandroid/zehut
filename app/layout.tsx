@@ -44,20 +44,11 @@ export const metadata: Metadata = {
     siteName,
     title: siteName,
     description: siteDescription,
-    images: [
-      {
-        url: '/zehut-logo.png',
-        width: 400,
-        height: 300,
-        alt: 'זהות – תנועה ישראלית יהודית',
-      },
-    ],
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: siteName,
     description: siteDescription,
-    images: ['/zehut-logo.png'],
   },
   robots: {
     index: true,
