@@ -20,37 +20,14 @@ export default async function Image() {
           fontFamily: 'sans-serif',
         }}
       >
-        {/* Logo area */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '16px',
-          }}
-        >
-          {/* Stylized logo text */}
-          <div
-            style={{
-              fontSize: '120px',
-              fontWeight: 900,
-              color: '#2b7eb5',
-              lineHeight: 1,
-              letterSpacing: '-2px',
-            }}
-          >
-            זהות.
-          </div>
-          <div
-            style={{
-              fontSize: '28px',
-              color: '#64748b',
-              fontWeight: 500,
-            }}
-          >
-            תנועה ישראלית יהודית
-          </div>
-        </div>
+        {/* Zehut logo */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="https://zehut.vercel.app/zehut-logo.png"
+          width={280}
+          height={210}
+          alt=""
+        />
 
         {/* Divider */}
         <div
@@ -59,51 +36,40 @@ export default async function Image() {
             height: '4px',
             background: '#2b7eb5',
             borderRadius: '2px',
-            margin: '32px 0',
+            margin: '24px 0',
           }}
         />
-
-        {/* Subtitle */}
-        <div
-          style={{
-            fontSize: '36px',
-            color: '#1e293b',
-            fontWeight: 700,
-            textAlign: 'center',
-          }}
-        >
-          מרכז התוכן לפעילים
-        </div>
-        <div
-          style={{
-            fontSize: '22px',
-            color: '#64748b',
-            marginTop: '12px',
-            textAlign: 'center',
-          }}
-        >
-          גלו ושתפו את התכנים של זהות ומשה פייגלין
-        </div>
 
         {/* Platform icons row */}
         <div
           style={{
             display: 'flex',
-            gap: '24px',
-            marginTop: '36px',
-            fontSize: '18px',
-            color: '#94a3b8',
+            gap: '20px',
+            fontSize: '24px',
+            color: '#475569',
+            fontWeight: 600,
           }}
         >
           <span>YouTube</span>
-          <span>•</span>
+          <span style={{ color: '#94a3b8' }}>|</span>
           <span>Instagram</span>
-          <span>•</span>
+          <span style={{ color: '#94a3b8' }}>|</span>
           <span>X</span>
-          <span>•</span>
+          <span style={{ color: '#94a3b8' }}>|</span>
           <span>Telegram</span>
-          <span>•</span>
+          <span style={{ color: '#94a3b8' }}>|</span>
           <span>Spotify</span>
+        </div>
+
+        {/* URL */}
+        <div
+          style={{
+            fontSize: '18px',
+            color: '#94a3b8',
+            marginTop: '24px',
+          }}
+        >
+          zehut.vercel.app
         </div>
       </div>
     ),
