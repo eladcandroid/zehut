@@ -7,7 +7,6 @@ import {
   Users,
   Eye,
   YoutubeLogo,
-  TiktokLogo,
   InstagramLogo,
   TelegramLogo,
   XLogo,
@@ -26,7 +25,6 @@ interface Stats {
 
 const platformIcons: Record<string, typeof YoutubeLogo> = {
   youtube: YoutubeLogo,
-  tiktok: TiktokLogo,
   instagram: InstagramLogo,
   telegram: TelegramLogo,
   x: XLogo,
@@ -34,7 +32,6 @@ const platformIcons: Record<string, typeof YoutubeLogo> = {
 
 const platformColors: Record<string, string> = {
   youtube: 'text-red-500',
-  tiktok: 'text-gray-800',
   instagram: 'text-pink-500',
   telegram: 'text-sky-500',
   x: 'text-gray-800',
@@ -241,15 +238,6 @@ export default function AdminPage() {
               >
                 <XLogo weight="fill" className="w-4 h-4" />
                 <span>חפש ב-X</span>
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full justify-start gap-2"
-                onClick={() => triggerFetch('tiktok', 'זהות פייגלין')}
-                disabled={isFetching}
-              >
-                <TiktokLogo weight="fill" className="w-4 h-4" />
-                <span>חפש בטיקטוק</span>
               </Button>
             </div>
             {isFetching && (

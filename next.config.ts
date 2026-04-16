@@ -7,10 +7,6 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'i.ytimg.com' },
       { protocol: 'https', hostname: 'yt3.ggpht.com' },
       { protocol: 'https', hostname: 'yt3.googleusercontent.com' },
-      // TikTok
-      { protocol: 'https', hostname: 'p16-sign-sg.tiktokcdn.com' },
-      { protocol: 'https', hostname: 'p16-sign-va.tiktokcdn.com' },
-      { protocol: 'https', hostname: '*.tiktokcdn.com' },
       // Instagram
       { protocol: 'https', hostname: 'scontent.cdninstagram.com' },
       { protocol: 'https', hostname: '*.cdninstagram.com' },

@@ -13,7 +13,6 @@ interface PlatformBadgeProps {
 
 const platformStyles: Record<Platform, string> = {
   youtube: 'bg-red-50 text-red-600 border-red-200',
-  tiktok: 'bg-gray-50 text-gray-800 border-gray-200',
   instagram: 'bg-pink-50 text-pink-600 border-pink-200',
   telegram: 'bg-sky-50 text-sky-600 border-sky-200',
   x: 'bg-gray-50 text-gray-800 border-gray-200',

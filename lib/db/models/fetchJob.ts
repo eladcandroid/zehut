@@ -70,7 +70,7 @@ const FetchJobSchema = new Schema<IFetchJob>(
   {
     platform: {
       type: String,
-      enum: ['youtube', 'tiktok', 'instagram', 'telegram', 'x', 'facebook'],
+      enum: ['youtube', 'instagram', 'telegram', 'x', 'facebook'],
       required: true,
     },
     sourceType: {

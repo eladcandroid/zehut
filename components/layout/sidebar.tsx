@@ -3,7 +3,6 @@
 import { X } from '@phosphor-icons/react';
 import {
   YoutubeLogo,
-  TiktokLogo,
   InstagramLogo,
   TelegramLogo,
   XLogo,
@@ -50,11 +49,6 @@ const platformFilters: FilterOption[] = [
     value: 'x',
     label: 'X',
     icon: <XLogo weight="fill" className="w-4 h-4" />,
-  },
-  {
-    value: 'tiktok',
-    label: 'טיקטוק',
-    icon: <TiktokLogo weight="fill" className="w-4 h-4" />,
   },
   {
     value: 'instagram',
