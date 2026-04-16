@@ -34,6 +34,7 @@ export interface ContentCardData {
   publishedAt: string;
   tags?: string[];
   isActive?: boolean;
+  mediaUrls?: string[];
 }
 
 interface ContentCardProps {
@@ -158,7 +159,11 @@ export function ContentCard({ content, className }: ContentCardProps) {
             contentUrl={content.contentUrl}
             shareCount={content.shareCount}
           />
-          {isVideo && <DownloadButton contentUrl={content.contentUrl} />}
+          {isVideo && content.platform !== 'telegram' && (
+            content.platform === 'spotify' && content.mediaUrls?.[0]
+              ? <DownloadButton contentUrl={content.mediaUrls[0]} directDownload />
+              : <DownloadButton contentUrl={content.contentUrl} />
+          )}
         </div>
       </div>
     </Card>
