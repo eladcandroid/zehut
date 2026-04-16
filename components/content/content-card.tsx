@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Eye, Heart, Play } from '@phosphor-icons/react';
+import { Eye, Heart, Play, Quotes, ImageSquare } from '@phosphor-icons/react';
 import { Card } from '@/components/ui/card';
 import { PlatformBadge } from './platform-badge';
 import { ShareMenu } from './share-menu';
@@ -66,8 +66,14 @@ export function ContentCard({ content, className }: ContentCardProps) {
             onError={() => setImageError(true)}
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Play weight="fill" className="w-12 h-12 text-[var(--color-muted)]" />
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+            {isVideo ? (
+              <Play weight="fill" className="w-12 h-12 text-[var(--color-muted)]" />
+            ) : content.type === 'image' ? (
+              <ImageSquare weight="fill" className="w-12 h-12 text-[var(--color-muted)]" />
+            ) : (
+              <Quotes weight="fill" className="w-10 h-10 text-[var(--color-muted)]" />
+            )}
           </div>
         )}
         {isVideo && (
