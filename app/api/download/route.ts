@@ -1,39 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const PROXY_URL = process.env.YT_PROXY_URL || 'https://zehut-yt-proxy.fly.dev';
-const PROXY_SECRET = process.env.YT_PROXY_SECRET || '';
+import { detectPlatform } from '@/lib/downloads/detect-platform';
+import { resolveDownload, DownloadResolveError } from '@/lib/downloads/router';
 
 export async function GET(request: NextRequest) {
   const url = request.nextUrl.searchParams.get('url');
-  const quality = request.nextUrl.searchParams.get('quality') || 'whatsapp';
-  const direct = request.nextUrl.searchParams.get('direct') === '1';
+  const quality = request.nextUrl.searchParams.get('quality') || 'best';
+  const contentId = request.nextUrl.searchParams.get('contentId');
+  const explicitPlatform = request.nextUrl.searchParams.get('platform');
 
   if (!url) {
     return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 });
   }
 
-  // Direct proxy mode: stream the audio file through our API (bypasses CORS)
-  if (direct) {
-    try {
-      const res = await fetch(url, { redirect: 'follow' });
-      if (!res.ok) {
-        return NextResponse.json({ error: 'Failed to fetch audio' }, { status: 502 });
-      }
-
-      const filename = url.split('/').pop()?.split('?')[0] || 'podcast.mp3';
-      return new NextResponse(res.body, {
-        headers: {
-          'Content-Type': res.headers.get('Content-Type') || 'audio/mpeg',
-          'Content-Length': res.headers.get('Content-Length') || '',
-          'Content-Disposition': `attachment; filename="${filename}"`,
-        },
-      });
-    } catch {
-      return NextResponse.json({ error: 'Download failed' }, { status: 500 });
-    }
+  const platform = explicitPlatform || detectPlatform(url);
+  if (!platform) {
+    return NextResponse.json(
+      { error: 'Unsupported platform for this URL' },
+      { status: 400 }
+    );
   }
 
-  const downloadUrl = `${PROXY_URL}/download?url=${encodeURIComponent(url)}&quality=${quality}&token=${PROXY_SECRET}`;
+  try {
+    const resolved = await resolveDownload({
+      url,
+      quality,
+      platform: platform as ReturnType<typeof detectPlatform> extends infer P ? NonNullable<P> : never,
+      contentId,
+    });
 
-  return NextResponse.json({ downloadUrl });
+    if (resolved.viaCorsCdn) {
+      return NextResponse.json({
+        mode: 'direct',
+        downloadUrl: resolved.mediaUrl,
+        filename: resolved.filename,
+        contentType: resolved.contentType,
+        tier: resolved.tier,
+        resolver: resolved.resolverId,
+      });
+    }
+
+    const streamUrl = new URL('/api/download/stream', request.nextUrl.origin);
+    streamUrl.searchParams.set('src', resolved.mediaUrl);
+    streamUrl.searchParams.set('name', resolved.filename);
+    streamUrl.searchParams.set('ct', resolved.contentType);
+    if (contentId) streamUrl.searchParams.set('contentId', contentId);
+
+    return NextResponse.json({
+      mode: 'proxy',
+      downloadUrl: streamUrl.pathname + streamUrl.search,
+      filename: resolved.filename,
+      contentType: resolved.contentType,
+      tier: resolved.tier,
+      resolver: resolved.resolverId,
+    });
+  } catch (err) {
+    if (err instanceof DownloadResolveError) {
+      return NextResponse.json(
+        { error: err.message, attempts: err.attempts },
+        { status: 502 }
+      );
+    }
+    const message = err instanceof Error ? err.message : 'Download resolution failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

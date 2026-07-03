@@ -6,6 +6,7 @@ import {
   House,
   FileText,
   ArrowsClockwise,
+  DownloadSimple,
   type Icon,
 } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils/cn';
@@ -20,6 +21,7 @@ const navItems: NavItem[] = [
   { href: '/admin', icon: House, label: 'סקירה' },
   { href: '/admin/content', icon: FileText, label: 'תוכן' },
   { href: '/admin/jobs', icon: ArrowsClockwise, label: 'משימות' },
+  { href: '/admin/downloads', icon: DownloadSimple, label: 'הורדות' },
 ];
 
 export function AdminNav() {

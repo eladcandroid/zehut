@@ -161,8 +161,18 @@ export function ContentCard({ content, className }: ContentCardProps) {
           />
           {isVideo && content.platform !== 'telegram' && (
             content.platform === 'spotify' && content.mediaUrls?.[0]
-              ? <DownloadButton contentUrl={content.mediaUrls[0]} directDownload />
-              : <DownloadButton contentUrl={content.contentUrl} />
+              ? <DownloadButton
+                  contentUrl={content.mediaUrls[0]}
+                  platform={content.platform}
+                  contentId={content._id}
+                  fallbackUrl={content.contentUrl}
+                  directDownload
+                />
+              : <DownloadButton
+                  contentUrl={content.contentUrl}
+                  platform={content.platform}
+                  contentId={content._id}
+                />
           )}
         </div>
       </div>

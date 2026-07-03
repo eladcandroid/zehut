@@ -1,8 +1,20 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { DownloadSimple, CircleNotch, X, WhatsappLogo, FilmStrip, HighDefinition, Star, Check, Warning } from '@phosphor-icons/react';
+import {
+  DownloadSimple,
+  CircleNotch,
+  X,
+  WhatsappLogo,
+  FilmStrip,
+  HighDefinition,
+  Star,
+  Check,
+  Warning,
+  ArrowSquareOut,
+} from '@phosphor-icons/react';
 import { cn } from '@/lib/utils/cn';
+import type { Platform } from '@/lib/db/models/content';
 
 const QUALITIES = [
   { id: 'whatsapp', label: 'WhatsApp', desc: '360p · קובץ קטן', icon: WhatsappLogo, color: 'text-green-500' },
@@ -11,121 +23,98 @@ const QUALITIES = [
   { id: 'best', label: 'הכי טוב', desc: 'איכות מקסימלית', icon: Star, color: 'text-amber-500' },
 ] as const;
 
-type DownloadState = 'idle' | 'processing' | 'downloading' | 'done' | 'error';
+type DownloadState = 'idle' | 'processing' | 'done' | 'error';
 
 interface DownloadButtonProps {
   contentUrl: string;
   className?: string;
+  platform?: Platform;
+  contentId?: string;
   directDownload?: boolean;
+  fallbackUrl?: string;
 }
 
-export function DownloadButton({ contentUrl, className, directDownload }: DownloadButtonProps) {
+interface ResolveResponse {
+  mode: 'direct' | 'proxy';
+  downloadUrl: string;
+  filename: string;
+  contentType: string;
+  tier: number;
+  resolver: string;
+}
+
+export function DownloadButton({
+  contentUrl,
+  className,
+  platform,
+  contentId,
+  directDownload,
+  fallbackUrl,
+}: DownloadButtonProps) {
   const [state, setState] = useState<DownloadState>('idle');
-  const [progress, setProgress] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
+    document.body.style.overflow = isOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
+
+  const triggerDownload = (url: string, filename: string) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 0);
+  };
 
   const handleDownload = async (quality: string) => {
     setIsOpen(false);
     setState('processing');
-    setProgress(0);
     abortRef.current = new AbortController();
 
     try {
-      let res: Response;
+      const params = new URLSearchParams({ url: contentUrl, quality });
+      if (platform) params.set('platform', platform);
+      if (contentId) params.set('contentId', contentId);
 
-      if (directDownload) {
-        // Direct audio download — stream through our API to bypass CORS
-        res = await fetch(
-          `/api/download?url=${encodeURIComponent(contentUrl)}&direct=1`,
-          { signal: abortRef.current.signal },
-        );
-      } else {
-        // Step 1: Get the proxy download URL from our API
-        const apiRes = await fetch(
-          `/api/download?url=${encodeURIComponent(contentUrl)}&quality=${quality}`,
-          { signal: abortRef.current.signal },
-        );
-        if (!apiRes.ok) throw new Error('API error');
-        const { downloadUrl } = await apiRes.json();
+      const apiRes = await fetch(`/api/download?${params.toString()}`, {
+        signal: abortRef.current.signal,
+      });
 
-        // Step 2: Fetch from the proxy
-        res = await fetch(downloadUrl, { signal: abortRef.current.signal });
+      if (!apiRes.ok) {
+        const body = await apiRes.json().catch(() => ({}));
+        throw new Error(body?.error || `API error ${apiRes.status}`);
       }
 
-      if (!res.ok) {
-        // Try to parse error JSON from proxy
-        const ct = res.headers.get('Content-Type') || '';
-        if (ct.includes('application/json')) {
-          const body = await res.json();
-          throw new Error(body?.error || 'Download failed');
-        }
-        throw new Error('Download failed');
-      }
-
-      const contentLength = Number(res.headers.get('Content-Length') || 0);
-      const reader = res.body!.getReader();
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-
-      setState('downloading');
-
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        received += value.length;
-        if (contentLength > 0) {
-          setProgress(Math.round((received / contentLength) * 100));
-        }
-      }
-
-      // Extract filename from Content-Disposition if available
-      const disposition = res.headers.get('Content-Disposition') || '';
-      const filenameMatch = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
-      const defaultName = directDownload ? 'podcast.mp3' : 'video.mp4';
-      const filename = filenameMatch ? decodeURIComponent(filenameMatch[1]) : defaultName;
-
-      const blob = new Blob(chunks as BlobPart[]);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      const data = (await apiRes.json()) as ResolveResponse;
+      triggerDownload(data.downloadUrl, data.filename);
 
       setState('done');
-      setTimeout(() => setState('idle'), 2000);
+      setTimeout(() => setState('idle'), 2500);
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') {
         setState('idle');
         return;
       }
       setState('error');
-      setTimeout(() => setState('idle'), 3000);
+      setTimeout(() => setState('idle'), 5000);
     } finally {
       abortRef.current = null;
     }
   };
 
-  const handleCancel = () => {
-    abortRef.current?.abort();
+  const openOnPlatform = () => {
+    const url = fallbackUrl || contentUrl;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setState('idle');
   };
-
-  const isActive = state !== 'idle' && state !== 'done' && state !== 'error';
 
   return (
     <div className={className}>
-      {/* Download button / progress indicator */}
       {state === 'idle' ? (
         <button
           onClick={() => directDownload ? handleDownload('best') : setIsOpen(true)}
@@ -140,65 +129,47 @@ export function DownloadButton({ contentUrl, className, directDownload }: Downlo
           <DownloadSimple weight="bold" className="w-4 h-4" />
           <span>הורד</span>
         </button>
+      ) : state === 'processing' ? (
+        <button
+          disabled
+          className={cn(
+            'inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium',
+            'rounded-[var(--radius-md)]',
+            'bg-[var(--color-border-subtle)] text-[var(--color-secondary)]',
+          )}
+        >
+          <CircleNotch weight="bold" className="w-4 h-4 animate-spin" />
+          <span>מעבד...</span>
+        </button>
       ) : state === 'done' ? (
         <span className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-green-600">
           <Check weight="bold" className="w-4 h-4" />
-          <span>הושלם</span>
-        </span>
-      ) : state === 'error' ? (
-        <span className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-red-500">
-          <Warning weight="bold" className="w-4 h-4" />
-          <span>נכשל</span>
+          <span>התחלת הורדה</span>
         </span>
       ) : (
         <button
-          onClick={handleCancel}
+          onClick={openOnPlatform}
+          title="לא ניתן להוריד כעת. לחץ לפתיחה באתר המקור"
           className={cn(
-            'relative inline-flex items-center justify-center gap-1.5 h-8 text-sm font-medium overflow-hidden',
+            'inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium',
             'rounded-[var(--radius-md)] transition-all',
-            'bg-[var(--color-border-subtle)] text-[var(--color-secondary)]',
-            state === 'processing' ? 'px-3' : 'px-3 min-w-[72px]',
+            'bg-red-500/10 text-red-600 hover:bg-red-500/15',
           )}
-          title="לחץ לביטול"
         >
-          {/* Progress fill */}
-          {state === 'downloading' && (
-            <div
-              className="absolute inset-y-0 start-0 bg-sky-500/15 transition-[width] duration-300 ease-linear"
-              style={{ width: `${progress}%` }}
-            />
-          )}
-          <span className="relative flex items-center gap-1.5">
-            {state === 'processing' ? (
-              <>
-                <CircleNotch weight="bold" className="w-4 h-4 animate-spin" />
-                <span>מעבד...</span>
-              </>
-            ) : progress > 0 ? (
-              <>
-                <DownloadSimple weight="bold" className="w-4 h-4" />
-                <span className="tabular-nums">{progress}%</span>
-              </>
-            ) : (
-              <>
-                <CircleNotch weight="bold" className="w-4 h-4 animate-spin" />
-                <span>מוריד...</span>
-              </>
-            )}
-          </span>
+          <Warning weight="bold" className="w-4 h-4" />
+          <span>פתח במקור</span>
+          <ArrowSquareOut weight="bold" className="w-3.5 h-3.5" />
         </button>
       )}
 
-      {/* Backdrop */}
-      {isOpen && !isActive && (
+      {isOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-[9998] animate-in fade-in-0 duration-200"
           onClick={() => setIsOpen(false)}
         />
       )}
 
-      {/* Bottom Sheet */}
-      {isOpen && !isActive && (
+      {isOpen && (
         <div
           className={cn(
             'fixed bottom-0 left-0 right-0 z-[9999]',
@@ -208,12 +179,10 @@ export function DownloadButton({ contentUrl, className, directDownload }: Downlo
             'pb-[env(safe-area-inset-bottom)]'
           )}
         >
-          {/* Handle */}
           <div className="flex justify-center pt-3 pb-2">
             <div className="w-10 h-1 bg-[var(--color-border)] rounded-full" />
           </div>
 
-          {/* Header */}
           <div className="flex items-center justify-between px-4 pb-3 border-b border-[var(--color-border)]">
             <h3 className="text-base font-semibold">הורדה</h3>
             <button
@@ -224,7 +193,6 @@ export function DownloadButton({ contentUrl, className, directDownload }: Downlo
             </button>
           </div>
 
-          {/* Quality Options */}
           <div className="p-4 grid grid-cols-4 gap-4">
             {QUALITIES.map((q) => {
               const Icon = q.icon;
@@ -243,7 +211,6 @@ export function DownloadButton({ contentUrl, className, directDownload }: Downlo
             })}
           </div>
 
-          {/* Info text */}
           <div className="px-4 pb-6 text-center">
             <p className="text-xs text-[var(--color-muted)]">
               ההורדה עשויה לקחת עד דקה
